@@ -55,11 +55,6 @@ bool smof_validate_header(const smof_header_t* header) {
         return false; /* Neither flag set */
     }
     
-    /* Check symbol count limit */
-    if (header->symbol_count > SMOF_MAX_SYMBOLS) {
-        return false;
-    }
-    
     /* Check section count */
     if (header->section_count > SMOF_MAX_SECTIONS) {
         return false;

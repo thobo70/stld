@@ -15,10 +15,10 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%d %H:%M:%S UTC")
 all: build-info stld star tools
 
 # Main targets
-.PHONY: stld star tools tests test-all test-memory test-smof test-error test-integration clean install coverage docs
+.PHONY: stld star tools tests test-all test-memory test-smof test-error test-integration test-dod clean install coverage docs
 
-stld: $(BUILD_DIR)/stld_exe
-star: $(BUILD_DIR)/star_exe
+stld: $(BUILD_DIR)/stld
+star: $(BUILD_DIR)/star
 tools: $(BUILD_DIR)/smof_dump $(BUILD_DIR)/star_list
 
 # Library targets
@@ -41,12 +41,12 @@ $(BUILD_DIR)/libstar.a: $(STAR_OBJS) $(BUILD_DIR)/libcommon.a
 	$(Q)$(RANLIB) $@
 
 # Executable targets
-$(BUILD_DIR)/stld_exe: $(SRC_DIR)/stld/main.c $(BUILD_DIR)/libstld.a
+$(BUILD_DIR)/stld: $(SRC_DIR)/stld/main.c $(BUILD_DIR)/libstld.a
 	@mkdir -p $(dir $@)
 	$(call print_info,Linking STLD executable)
 	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $< -L$(BUILD_DIR) -lstld -lcommon
 
-$(BUILD_DIR)/star_exe: $(SRC_DIR)/star/main.c $(BUILD_DIR)/libstar.a
+$(BUILD_DIR)/star: $(SRC_DIR)/star/main.c $(BUILD_DIR)/libstar.a
 	@mkdir -p $(dir $@)
 	$(call print_info,Linking STAR executable)
 	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $< -L$(BUILD_DIR) -lstar -lcommon
@@ -109,6 +109,11 @@ test-integration: $(BUILD_DIR)/test_integration
 test-all: test-memory test-smof test-error test-integration
 	$(call print_success,All individual tests passed!)
 
+# Definition of Done test
+test-dod: stld star
+	$(call print_info,Running Definition of Done test)
+	$(Q)tests/integration/test_simple_dod.sh
+
 $(BUILD_DIR)/test_runner: $(TEST_OBJS) $(BUILD_DIR)/libstld.a $(BUILD_DIR)/libstar.a
 	@mkdir -p $(dir $@)
 	$(call print_info,Linking test runner)
@@ -167,7 +172,7 @@ distclean: clean
 	$(call print_success,All generated files cleaned)
 
 # Pattern rules for object files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+$(BUILD_DIR)/obj/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(call print_info,Compiling $(notdir $<))
 	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
@@ -201,6 +206,7 @@ help:
 	@echo "  test-smof     - Run SMOF format tests"
 	@echo "  test-error    - Run error handling tests"
 	@echo "  test-integration - Run integration tests"
+	@echo "  test-dod      - Run Definition of Done test"
 	@echo "  coverage      - Generate coverage report"
 	@echo "  docs          - Generate documentation"
 	@echo "  static-analysis - Run static analysis"

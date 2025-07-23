@@ -75,9 +75,9 @@ TEST_SOURCES := $(wildcard $(TESTS_DIR)/test_*.c) \
                 $(TESTS_DIR)/unity/unity.c
 
 # Object files
-COMMON_OBJS := $(COMMON_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-STLD_OBJS := $(filter-out %/main.c,$(STLD_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o))
-STAR_OBJS := $(filter-out %/main.c,$(STAR_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o))
+COMMON_OBJS := $(COMMON_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/obj/%.o)
+STLD_OBJS := $(filter-out %/main.c,$(STLD_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/obj/%.o))
+STAR_OBJS := $(filter-out %/main.c,$(STAR_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/obj/%.o))
 TEST_OBJS := $(TEST_SOURCES:$(TESTS_DIR)/%.c=$(BUILD_DIR)/tests/%.o)
 
 # Dependency files

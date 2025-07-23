@@ -1,0 +1,1 @@
+Archive: /home/tom/project/stld/tests/integration/output/archives/libtest.star
