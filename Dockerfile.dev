@@ -1,0 +1,193 @@
+# Dockerfile.dev - Development environment for STLD/STAR project
+# This container includes all tools needed for C99 development with STLD/STAR
+
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update package manager and install core tools
+RUN apt-get update && apt-get install -y \
+    # Core build tools
+    build-essential \
+    gcc-9 \
+    gcc-10 \
+    gcc-11 \
+    g++-9 \
+    g++-10 \
+    g++-11 \
+    clang-10 \
+    clang-11 \
+    clang-12 \
+    clang-tools-10 \
+    clang-tools-11 \
+    clang-tools-12 \
+    clang-format \
+    clang-tidy \
+    make \
+    cmake \
+    git \
+    pkg-config \
+    autoconf \
+    automake \
+    libtool \
+    # Cross-compilation toolchains
+    gcc-arm-linux-gnueabihf \
+    gcc-aarch64-linux-gnu \
+    gcc-riscv64-linux-gnu \
+    gcc-arm-none-eabi \
+    gdb-arm-none-eabi \
+    gdb-multiarch \
+    # Testing and debugging tools
+    valgrind \
+    gdb \
+    strace \
+    ltrace \
+    # Static analysis tools
+    cppcheck \
+    vera++ \
+    splint \
+    # Code coverage tools
+    lcov \
+    gcovr \
+    # Documentation tools
+    doxygen \
+    graphviz \
+    texlive-latex-base \
+    texlive-fonts-recommended \
+    # Libraries for development
+    zlib1g-dev \
+    liblz4-dev \
+    liblzma-dev \
+    libzstd-dev \
+    # Emulation tools
+    qemu-system \
+    qemu-user \
+    qemu-utils \
+    # Development utilities
+    vim \
+    nano \
+    curl \
+    wget \
+    tree \
+    htop \
+    tmux \
+    screen \
+    # Additional tools
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Unicorn Engine from source (since package may not be available)
+RUN git clone https://github.com/unicorn-engine/unicorn.git /tmp/unicorn && \
+    cd /tmp/unicorn && \
+    mkdir build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd / && rm -rf /tmp/unicorn
+
+# Install additional Python tools for development
+RUN pip3 install \
+    compiledb \
+    clang-format \
+    gcovr \
+    lizard \
+    flawfinder
+
+# Set up development user (optional, for better security)
+RUN useradd -m -s /bin/bash developer && \
+    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Set default compiler versions
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 \
+                        --slave /usr/bin/g++ g++ /usr/bin/g++-11 && \
+    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-12 100 \
+                        --slave /usr/bin/clang++ clang++ /usr/bin/clang++-12
+
+# Create workspace directory
+WORKDIR /workspace
+
+# Set environment variables for development
+ENV CC=gcc
+ENV CXX=g++
+ENV CFLAGS="-std=c99 -Wall -Wextra -pedantic"
+ENV MAKEFLAGS="-j$(nproc)"
+
+# Add development aliases and functions
+RUN echo 'alias ll="ls -la"' >> /root/.bashrc && \
+    echo 'alias la="ls -A"' >> /root/.bashrc && \
+    echo 'alias l="ls -CF"' >> /root/.bashrc && \
+    echo 'alias grep="grep --color=auto"' >> /root/.bashrc && \
+    echo 'alias make="make -j$(nproc)"' >> /root/.bashrc && \
+    echo 'export PS1="\[\033[01;32m\]\u@stld-dev\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /root/.bashrc
+
+# Create a script to show development environment info
+RUN cat > /usr/local/bin/dev-info << 'EOF'
+#!/bin/bash
+echo "STLD/STAR Development Environment"
+echo "================================"
+echo "OS: $(lsb_release -d | cut -f2)"
+echo "Kernel: $(uname -r)"
+echo "Architecture: $(uname -m)"
+echo ""
+echo "Compilers:"
+echo "  GCC: $(gcc --version | head -n1)"
+echo "  Clang: $(clang --version | head -n1)"
+echo ""
+echo "Build tools:"
+echo "  Make: $(make --version | head -n1)"
+echo "  Git: $(git --version)"
+echo ""
+echo "Cross-compilation targets:"
+echo "  ARM: $(arm-linux-gnueabihf-gcc --version 2>/dev/null | head -n1 || echo 'Not available')"
+echo "  AArch64: $(aarch64-linux-gnu-gcc --version 2>/dev/null | head -n1 || echo 'Not available')"
+echo "  RISC-V: $(riscv64-linux-gnu-gcc --version 2>/dev/null | head -n1 || echo 'Not available')"
+echo "  ARM Bare Metal: $(arm-none-eabi-gcc --version 2>/dev/null | head -n1 || echo 'Not available')"
+echo ""
+echo "Analysis tools:"
+echo "  Valgrind: $(valgrind --version 2>/dev/null || echo 'Not available')"
+echo "  Cppcheck: $(cppcheck --version 2>/dev/null || echo 'Not available')"
+echo "  LCOV: $(lcov --version 2>/dev/null | head -n1 || echo 'Not available')"
+echo ""
+echo "Libraries:"
+echo "  Unicorn: $(pkg-config --modversion unicorn 2>/dev/null || echo 'Not available')"
+echo "  zlib: $(pkg-config --modversion zlib 2>/dev/null || echo 'Not available')"
+echo "  LZ4: $(pkg-config --modversion liblz4 2>/dev/null || echo 'Not available')"
+echo ""
+echo "Usage:"
+echo "  Build project:     make all"
+echo "  Run tests:         make tests"
+echo "  Code coverage:     make coverage"
+echo "  Documentation:     make docs"
+echo "  Static analysis:   make static-analysis"
+echo "  Cross-compile:     make CROSS_COMPILE=arm-linux-gnueabihf-"
+EOF
+
+RUN chmod +x /usr/local/bin/dev-info
+
+# Set up git configuration template
+RUN git config --global init.defaultBranch main && \
+    git config --global color.ui auto && \
+    git config --global core.editor vim
+
+# Add welcome message
+RUN echo 'echo "Welcome to STLD/STAR development environment!"' >> /root/.bashrc && \
+    echo 'echo "Run dev-info for environment details"' >> /root/.bashrc && \
+    echo 'echo "Run ./verify_environment.sh to check setup"' >> /root/.bashrc
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD gcc --version && make --version || exit 1
+
+# Default command
+CMD ["/bin/bash"]
+
+# Labels for metadata
+LABEL maintainer="STLD/STAR Development Team"
+LABEL version="1.0"
+LABEL description="Development environment for STLD/STAR C99 project"
+LABEL org.label-schema.build-date="${BUILD_DATE}"
+LABEL org.label-schema.vcs-url="https://github.com/your-org/stld"
+LABEL org.label-schema.schema-version="1.0"

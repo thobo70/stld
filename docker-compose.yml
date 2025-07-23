@@ -1,0 +1,122 @@
+# docker-compose.yml - Development environment for STLD/STAR
+version: '3.8'
+
+services:
+  # Main development environment
+  stld-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+    container_name: stld-dev
+    volumes:
+      # Mount project directory
+      - .:/workspace
+      # Mount home directory for persistent settings
+      - stld-dev-home:/root
+      # Mount cache for faster builds
+      - stld-dev-cache:/var/cache
+    working_dir: /workspace
+    environment:
+      # Development environment variables
+      - CC=gcc
+      - CXX=g++
+      - CFLAGS=-std=c99 -Wall -Wextra -pedantic
+      - MAKEFLAGS=-j$(nproc)
+      # Enable colored output
+      - TERM=xterm-256color
+      - COLORTERM=truecolor
+    stdin_open: true
+    tty: true
+    # Enable debugging capabilities
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    # Network for potential remote debugging
+    ports:
+      - "3000:3000"  # Documentation server
+      - "8080:8080"  # Development web server
+    # Resource limits
+    mem_limit: 4g
+    cpus: '2.0'
+
+  # Lightweight build-only environment
+  stld-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: stld-build
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: make all
+    profiles:
+      - build-only
+
+  # Testing environment with additional tools
+  stld-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: stld-test
+    volumes:
+      - .:/workspace
+      - stld-test-results:/workspace/test-results
+    working_dir: /workspace
+    environment:
+      - ENABLE_VALGRIND=1
+      - COVERAGE_ENABLED=1
+    command: make tests coverage
+    profiles:
+      - testing
+
+  # Cross-compilation environment
+  stld-cross:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: stld-cross
+    volumes:
+      - .:/workspace
+      - stld-cross-builds:/workspace/cross-builds
+    working_dir: /workspace
+    environment:
+      - CROSS_COMPILE=arm-linux-gnueabihf-
+    command: make all
+    profiles:
+      - cross-compile
+
+  # Documentation generation
+  stld-docs:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: stld-docs
+    volumes:
+      - .:/workspace
+      - stld-docs-output:/workspace/docs
+    working_dir: /workspace
+    command: make docs
+    ports:
+      - "8000:8000"
+    profiles:
+      - documentation
+
+volumes:
+  # Persistent volumes for development
+  stld-dev-home:
+    driver: local
+  stld-dev-cache:
+    driver: local
+  stld-test-results:
+    driver: local
+  stld-cross-builds:
+    driver: local
+  stld-docs-output:
+    driver: local
+
+networks:
+  default:
+    name: stld-network
