@@ -3,19 +3,6 @@ build/
 coverage/
 analysis/
 
-# Object files and libraries
-*.o
-*.a
-*.so
-*.exe
-*.dll
-
-# Debug and profiling files
-*.gcno
-*.gcda
-*.gcov
-gmon.out
-
 # Documentation output
 docs/api/
 docs/html/
@@ -46,13 +33,6 @@ node_modules/
 # Development environment
 .env
 *.local
-
-# Compiled binaries
-stld
-star
-smof_dump
-star_list
-test_runner
 
 # Memory debugging
 *.asan
