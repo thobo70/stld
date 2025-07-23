@@ -36,18 +36,17 @@ static void error_callback(const error_context_t* context) {
 }
 
 int main(int argc, char* argv[]) {
-    /* Set up error handling */
-    error_set_callback(error_callback);
+    /* C99 compound initializer for options */
+    struct {
+        bool show_header;
+        bool show_sections;
+        bool show_symbols;
+        bool show_relocations;
+        bool hex_dump;
+        bool verbose;
+    } opts = {false, false, false, false, false, false};
     
-    /* Command line options */
-    bool show_header = false;
-    bool show_sections = false;
-    bool show_symbols = false;
-    bool show_relocations = false;
-    bool hex_dump = false;
-    bool verbose = false;
     const char* filename = NULL;
-    
     static struct option long_options[] = {
         {"header",      no_argument, 0, 'h'},
         {"sections",    no_argument, 0, 's'},
@@ -59,28 +58,33 @@ int main(int argc, char* argv[]) {
         {"version",     no_argument, 0, 1002},
         {0, 0, 0, 0}
     };
+    int opt;
+    FILE* file;
+    smof_header_t header;
+    
+    /* Set up error handling */
+    error_set_callback(error_callback);
     
     /* Parse options */
-    int opt;
     while ((opt = getopt_long(argc, argv, "hsyrxv", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
-                show_header = true;
+                opts.show_header = true;
                 break;
             case 's':
-                show_sections = true;
+                opts.show_sections = true;
                 break;
             case 'y':
-                show_symbols = true;
+                opts.show_symbols = true;
                 break;
             case 'r':
-                show_relocations = true;
+                opts.show_relocations = true;
                 break;
             case 'x':
-                hex_dump = true;
+                opts.hex_dump = true;
                 break;
             case 'v':
-                verbose = true;
+                opts.verbose = true;
                 break;
             case 1001:
                 print_usage(argv[0]);
@@ -104,21 +108,20 @@ int main(int argc, char* argv[]) {
     filename = argv[optind];
     
     /* If no specific options, show everything */
-    if (!show_header && !show_sections && !show_symbols && !show_relocations) {
-        show_header = true;
-        show_sections = true;
-        show_symbols = true;
+    if (!opts.show_header && !opts.show_sections && !opts.show_symbols && !opts.show_relocations) {
+        opts.show_header = true;
+        opts.show_sections = true;
+        opts.show_symbols = true;
     }
     
     /* Open and read file */
-    FILE* file = fopen(filename, "rb");
+    file = fopen(filename, "rb");
     if (file == NULL) {
         perror("fopen");
         return EXIT_FAILURE;
     }
     
     /* Read header */
-    smof_header_t header;
     if (fread(&header, sizeof(header), 1, file) != 1) {
         fprintf(stderr, "Error: Failed to read SMOF header\n");
         fclose(file);
@@ -136,7 +139,7 @@ int main(int argc, char* argv[]) {
     printf("=" "============================================\n");
     
     /* Show header */
-    if (show_header) {
+    if (opts.show_header) {
         printf("\nFile Header:\n");
         printf("  Magic:              0x%08X ('%c%c%c%c')\n", 
                header.magic,
@@ -164,23 +167,223 @@ int main(int argc, char* argv[]) {
         printf("  Checksum:           0x%08X\n", header.checksum);
     }
     
-    /* TODO: Implement section, symbol, and relocation dumping */
-    
-    if (show_sections) {
+    /* Show sections */
+    if (opts.show_sections && header.section_count > 0) {
+        uint16_t i;
+        
         printf("\nSection Headers:\n");
         printf("  [Nr] Name              Type     Flags    Addr     Off    Size   Link Info  Align\n");
-        /* TODO: Read and display section headers */
+        
+        fseek(file, header.section_table_offset, SEEK_SET);
+        
+        for (i = 0; i < header.section_count; i++) {
+            smof_section_header_t section;
+            char section_name[64];
+            long pos;
+            
+            if (fread(&section, sizeof(section), 1, file) != 1) {
+                fprintf(stderr, "Error: Failed to read section header %u\n", i);
+                continue;
+            }
+            
+            /* Get section name from string table */
+            strcpy(section_name, "<unknown>");
+            if (header.string_table_offset > 0) {
+                pos = ftell(file);
+                fseek(file, header.string_table_offset + section.name_offset, SEEK_SET);
+                if (fread(section_name, 1, sizeof(section_name) - 1, file) > 0) {
+                    section_name[sizeof(section_name) - 1] = '\0';
+                }
+                fseek(file, pos, SEEK_SET);
+            }
+            
+            printf("  [%2u] %-16s %08X %08X %08X %06X %06X %4u %4u %5u\n",
+                   i, section_name, section.type, section.flags,
+                   section.addr, section.offset, section.size,
+                   section.link, section.info, section.alignment);
+            
+            /* Show hex dump if requested */
+            if (opts.hex_dump && section.size > 0 && section.offset > 0) {
+                uint8_t buffer[16];
+                size_t remaining, to_read, read_bytes, j;
+                uint32_t addr;
+                unsigned char c;
+                
+                printf("       Hex dump of section '%s':\n", section_name);
+                pos = ftell(file);
+                fseek(file, section.offset, SEEK_SET);
+                
+                remaining = section.size;
+                addr = section.addr;
+                
+                while (remaining > 0) {
+                    to_read = remaining < 16 ? remaining : 16;
+                    read_bytes = fread(buffer, 1, to_read, file);
+                    
+                    printf("       %08X: ", addr);
+                    
+                    /* Hex bytes */
+                    for (j = 0; j < 16; j++) {
+                        if (j < read_bytes) {
+                            printf("%02X ", buffer[j]);
+                        } else {
+                            printf("   ");
+                        }
+                        if (j == 7) printf(" ");
+                    }
+                    
+                    /* ASCII representation */
+                    printf(" |");
+                    for (j = 0; j < read_bytes; j++) {
+                        c = buffer[j];
+                        printf("%c", (c >= 32 && c <= 126) ? (char)c : '.');
+                    }
+                    printf("|\n");
+                    
+                    remaining -= read_bytes;
+                    addr += (uint32_t)read_bytes;
+                    
+                    if (read_bytes == 0) break;
+                }
+                
+                fseek(file, pos, SEEK_SET);
+                printf("\n");
+            }
+        }
     }
     
-    if (show_symbols) {
+    /* Show symbols */
+    if (opts.show_symbols && header.symbol_count > 0) {
+        uint16_t i;
+        
         printf("\nSymbol Table:\n");
         printf("  [Nr] Value    Size Type    Bind   Vis      Ndx Name\n");
-        /* TODO: Read and display symbol table */
+        
+        fseek(file, header.symbol_table_offset, SEEK_SET);
+        
+        for (i = 0; i < header.symbol_count; i++) {
+            smof_symbol_t symbol;
+            char symbol_name[128];
+            long pos;
+            const char* type_str;
+            const char* bind_str;
+            const char* vis_str;
+            
+            if (fread(&symbol, sizeof(symbol), 1, file) != 1) {
+                fprintf(stderr, "Error: Failed to read symbol %u\n", i);
+                continue;
+            }
+            
+            /* Get symbol name from string table */
+            strcpy(symbol_name, "<unknown>");
+            if (header.string_table_offset > 0) {
+                pos = ftell(file);
+                fseek(file, header.string_table_offset + symbol.name_offset, SEEK_SET);
+                if (fread(symbol_name, 1, sizeof(symbol_name) - 1, file) > 0) {
+                    symbol_name[sizeof(symbol_name) - 1] = '\0';
+                }
+                fseek(file, pos, SEEK_SET);
+            }
+            
+            /* Decode symbol type and binding */
+            type_str = "UNKNOWN";
+            switch (smof_symbol_get_type(&symbol)) {
+                case SMOF_STT_NOTYPE: type_str = "NOTYPE"; break;
+                case SMOF_STT_OBJECT: type_str = "OBJECT"; break;
+                case SMOF_STT_FUNC: type_str = "FUNC"; break;
+                case SMOF_STT_SECTION: type_str = "SECTION"; break;
+                case SMOF_STT_FILE: type_str = "FILE"; break;
+            }
+            
+            bind_str = "UNKNOWN";
+            switch (smof_symbol_get_binding(&symbol)) {
+                case SMOF_STB_LOCAL: bind_str = "LOCAL"; break;
+                case SMOF_STB_GLOBAL: bind_str = "GLOBAL"; break;
+                case SMOF_STB_WEAK: bind_str = "WEAK"; break;
+            }
+            
+            vis_str = "DEFAULT";
+            /* Symbol visibility is stored in the 'other' field, but there are no defined constants for it yet */
+            if ((symbol.other & 0x03) == 0) vis_str = "DEFAULT";
+            else if ((symbol.other & 0x03) == 1) vis_str = "INTERNAL";
+            else if ((symbol.other & 0x03) == 2) vis_str = "HIDDEN";
+            else if ((symbol.other & 0x03) == 3) vis_str = "PROTECTED";
+            
+            printf("  [%2u] %08X %4u %-7s %-6s %-8s %3u %s\n",
+                   i, symbol.value, symbol.size, type_str, bind_str, vis_str,
+                   symbol.section_index, symbol_name);
+        }
     }
     
-    if (show_relocations) {
+    /* Show relocations */
+    if (opts.show_relocations) {
+        uint16_t i;
+        
         printf("\nRelocation Tables:\n");
-        /* TODO: Read and display relocations */
+        
+        /* Find relocation sections */
+        fseek(file, header.section_table_offset, SEEK_SET);
+        
+        for (i = 0; i < header.section_count; i++) {
+            smof_section_header_t section;
+            char section_name[64];
+            long pos;
+            uint32_t rel_count, j;
+            
+            if (fread(&section, sizeof(section), 1, file) != 1) {
+                continue;
+            }
+            
+            if (section.type == SMOF_SECTION_REL || section.type == SMOF_SECTION_RELA) {
+                /* Get section name */
+                strcpy(section_name, "<unknown>");
+                if (header.string_table_offset > 0) {
+                    pos = ftell(file);
+                    fseek(file, header.string_table_offset + section.name_offset, SEEK_SET);
+                    fread(section_name, 1, sizeof(section_name) - 1, file);
+                    section_name[sizeof(section_name) - 1] = '\0';
+                    fseek(file, pos, SEEK_SET);
+                }
+                
+                printf("\nRelocation section '%s' at offset 0x%x contains %u entries:\n",
+                       section_name, section.offset, 
+                       section.size / (uint32_t)sizeof(smof_relocation_t));
+                
+                printf("  Offset   Info     Type             Sym.Value Sym.Name + Addend\n");
+                
+                /* Read relocations */
+                pos = ftell(file);
+                fseek(file, section.offset, SEEK_SET);
+                
+                rel_count = section.size / sizeof(smof_relocation_t);
+                for (j = 0; j < rel_count; j++) {
+                    smof_relocation_t rel;
+                    uint32_t sym_index, rel_type;
+                    const char* type_str;
+                    
+                    if (fread(&rel, sizeof(rel), 1, file) != 1) {
+                        break;
+                    }
+                    
+                    sym_index = smof_relocation_get_symbol(rel.info);
+                    rel_type = smof_relocation_get_type(rel.info);
+                    
+                    type_str = "UNKNOWN";
+                    switch (rel_type) {
+                        case SMOF_R_NONE: type_str = "NONE"; break;
+                        case SMOF_R_32: type_str = "32"; break;
+                        case SMOF_R_PC32: type_str = "PC32"; break;
+                        case SMOF_R_16: type_str = "16"; break;
+                        case SMOF_R_8: type_str = "8"; break;
+                    }
+                    
+                    printf("  %08X %08X %-16s %08X <symbol_%u> + %d\n",
+                           rel.offset, rel.info, type_str, 0, sym_index, 0);
+                }
+                
+                fseek(file, pos, SEEK_SET);
+            }
+        }
     }
     
     /* Cleanup */

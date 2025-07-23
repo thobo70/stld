@@ -3,43 +3,40 @@
 #include "smof.h"
 #include <stdio.h>
 #include <string.h>
-#include <stddef.h>
 
 /**
- * @file test_smof.c
- * @brief Unit tests for SMOF format validation
- * @details Tests SMOF header validation, section parsing, and format compliance
+ * @file test_smof.c  
+ * @brief Unit tests for SMOF format implementation
+ * @details Tests SMOF header validation, structure layout, and utility functions
  */
 
-/* Test data buffers */
-static uint8_t valid_smof_header[] = {
-    'S', 'M', 'O', 'F',  /* magic */
-    0x01, 0x00,          /* version */
-    0x01,                /* flags */
-    0x00,                /* reserved */
-    0x20, 0x00, 0x00, 0x00,  /* header_size */
-    0x00, 0x01, 0x00, 0x00,  /* section_count */
-    0x00, 0x00, 0x00, 0x00,  /* symbol_count */
-    0x00, 0x00, 0x00, 0x00,  /* relocation_count */
-    0x00, 0x00, 0x00, 0x00,  /* reserved2 */
-    0x00, 0x00, 0x00, 0x00,  /* reserved3 */
-    0x00, 0x00, 0x00, 0x00,  /* reserved4 */
-    0x00, 0x00, 0x00, 0x00   /* reserved5 */
-};
+/* Function prototypes for C90 compliance */
+void test_smof_validate_header_valid(void);
+void test_smof_validate_header_invalid_magic(void);
+void test_smof_validate_header_invalid_version(void);
+void test_smof_validate_header_null_header(void);
+void test_smof_get_header_size(void);
+void test_smof_header_alignment(void);
+void test_smof_magic_constant(void);
+void test_smof_section_type_values(void);
+void test_smof_symbol_binding_values(void);
+void test_smof_symbol_type_values(void);
+void test_smof_symbol_utility_functions(void);
+void test_smof_relocation_utility_functions(void);
+int test_smof_main(void);
 
-static uint8_t invalid_magic[] = {
-    'B', 'A', 'D', '!',  /* bad magic */
-    0x01, 0x00,          /* version */
-    0x01,                /* flags */
-    0x00,                /* reserved */
-    0x20, 0x00, 0x00, 0x00,  /* header_size */
-    0x00, 0x01, 0x00, 0x00,  /* section_count */
-    0x00, 0x00, 0x00, 0x00,  /* symbol_count */
-    0x00, 0x00, 0x00, 0x00,  /* relocation_count */
-    0x00, 0x00, 0x00, 0x00,  /* reserved2 */
-    0x00, 0x00, 0x00, 0x00,  /* reserved3 */
-    0x00, 0x00, 0x00, 0x00,  /* reserved4 */
-    0x00, 0x00, 0x00, 0x00   /* reserved5 */
+/* Test data */
+static const smof_header_t valid_header = {
+    .magic = SMOF_MAGIC,
+    .version = SMOF_VERSION,
+    .flags = SMOF_FLAG_LITTLE_ENDIAN,
+    .entry_point = 0x1000,
+    .section_count = 2,
+    .symbol_count = 5,
+    .section_table_offset = 32,
+    .symbol_table_offset = 112,
+    .string_table_offset = 192,
+    .checksum = 0
 };
 
 void setUp(void) {
@@ -51,129 +48,115 @@ void tearDown(void) {
 }
 
 void test_smof_validate_header_valid(void) {
-    smof_header_t header;
-    smof_error_t result = smof_parse_header(valid_smof_header, sizeof(valid_smof_header), &header);
-    
-    TEST_ASSERT_EQUAL_INT(SMOF_SUCCESS, result);
-    TEST_ASSERT_EQUAL_UINT32(SMOF_MAGIC, header.magic);
-    TEST_ASSERT_EQUAL_UINT16(1, header.version);
-    TEST_ASSERT_EQUAL_UINT8(1, header.flags);
-    TEST_ASSERT_EQUAL_UINT32(32, header.header_size);
-    TEST_ASSERT_EQUAL_UINT32(1, header.section_count);
+    TEST_ASSERT_TRUE(smof_validate_header(&valid_header));
+    TEST_ASSERT_TRUE(smof_header_is_valid(&valid_header));
 }
 
 void test_smof_validate_header_invalid_magic(void) {
-    smof_header_t header;
-    smof_error_t result = smof_parse_header(invalid_magic, sizeof(invalid_magic), &header);
+    smof_header_t header = valid_header;
+    header.magic = 0x12345678;
     
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_INVALID_MAGIC, result);
+    TEST_ASSERT_FALSE(smof_validate_header(&header));
+    TEST_ASSERT_FALSE(smof_header_is_valid(&header));
 }
 
-void test_smof_validate_header_null_data(void) {
-    smof_header_t header;
-    smof_error_t result = smof_parse_header(NULL, sizeof(valid_smof_header), &header);
+void test_smof_validate_header_invalid_version(void) {
+    smof_header_t header = valid_header;
+    header.version = 99;
     
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_INVALID_ARGUMENT, result);
+    TEST_ASSERT_FALSE(smof_validate_header(&header));
+    TEST_ASSERT_FALSE(smof_header_is_valid(&header));
 }
 
 void test_smof_validate_header_null_header(void) {
-    smof_error_t result = smof_parse_header(valid_smof_header, sizeof(valid_smof_header), NULL);
-    
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_INVALID_ARGUMENT, result);
-}
-
-void test_smof_validate_header_insufficient_size(void) {
-    smof_header_t header;
-    smof_error_t result = smof_parse_header(valid_smof_header, 16, &header);
-    
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_INSUFFICIENT_DATA, result);
-}
-
-void test_smof_validate_header_version_check(void) {
-    uint8_t future_version[32];
-    memcpy(future_version, valid_smof_header, sizeof(valid_smof_header));
-    
-    /* Set version to 999 */
-    future_version[4] = 0xE7;  /* 999 & 0xFF */
-    future_version[5] = 0x03;  /* (999 >> 8) & 0xFF */
-    
-    smof_header_t header;
-    smof_error_t result = smof_parse_header(future_version, sizeof(future_version), &header);
-    
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_UNSUPPORTED_VERSION, result);
-}
-
-void test_smof_validate_file_valid(void) {
-    smof_error_t result = smof_validate_file(valid_smof_header, sizeof(valid_smof_header));
-    
-    /* Should succeed even with minimal data since we have valid header */
-    TEST_ASSERT_EQUAL_INT(SMOF_SUCCESS, result);
-}
-
-void test_smof_validate_file_invalid(void) {
-    smof_error_t result = smof_validate_file(invalid_magic, sizeof(invalid_magic));
-    
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_INVALID_MAGIC, result);
-}
-
-void test_smof_validate_file_null_data(void) {
-    smof_error_t result = smof_validate_file(NULL, 100);
-    
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_INVALID_ARGUMENT, result);
-}
-
-void test_smof_validate_file_zero_size(void) {
-    smof_error_t result = smof_validate_file(valid_smof_header, 0);
-    
-    TEST_ASSERT_EQUAL_INT(SMOF_ERROR_INSUFFICIENT_DATA, result);
+    TEST_ASSERT_FALSE(smof_validate_header(NULL));
+    TEST_ASSERT_FALSE(smof_header_is_valid(NULL));
 }
 
 void test_smof_get_header_size(void) {
-    size_t size = smof_get_header_size();
+    size_t size = sizeof(smof_header_t);
     
-    TEST_ASSERT_EQUAL_UINT(sizeof(smof_header_t), size);
-    TEST_ASSERT_EQUAL_UINT(32, size);
+    TEST_ASSERT_EQUAL_UINT(32, (uint32_t)size);
 }
 
 void test_smof_header_alignment(void) {
-    /* Verify header structure alignment */
+    /* Test structure member offsets and alignment */
     TEST_ASSERT_EQUAL_UINT(0, offsetof(smof_header_t, magic));
     TEST_ASSERT_EQUAL_UINT(4, offsetof(smof_header_t, version));
     TEST_ASSERT_EQUAL_UINT(6, offsetof(smof_header_t, flags));
-    TEST_ASSERT_EQUAL_UINT(7, offsetof(smof_header_t, reserved));
-    TEST_ASSERT_EQUAL_UINT(8, offsetof(smof_header_t, header_size));
+    TEST_ASSERT_EQUAL_UINT(8, offsetof(smof_header_t, entry_point));
+    TEST_ASSERT_EQUAL_UINT(12, offsetof(smof_header_t, section_count));
+    TEST_ASSERT_EQUAL_UINT(14, offsetof(smof_header_t, symbol_count));
 }
 
 void test_smof_magic_constant(void) {
-    /* Verify magic constant value */
-    const uint32_t expected_magic = ('S' << 0) | ('M' << 8) | ('O' << 16) | ('F' << 24);
-    TEST_ASSERT_EQUAL_HEX32(expected_magic, SMOF_MAGIC);
+    /* Test magic constant value */
+    TEST_ASSERT_EQUAL_HEX32(0x534D4F46U, SMOF_MAGIC);
 }
 
 void test_smof_section_type_values(void) {
-    /* Verify section type constants */
-    TEST_ASSERT_EQUAL_UINT8(0, SMOF_SECTION_NULL);
-    TEST_ASSERT_EQUAL_UINT8(1, SMOF_SECTION_TEXT);
-    TEST_ASSERT_EQUAL_UINT8(2, SMOF_SECTION_DATA);
-    TEST_ASSERT_EQUAL_UINT8(3, SMOF_SECTION_BSS);
-    TEST_ASSERT_EQUAL_UINT8(4, SMOF_SECTION_SYMTAB);
-    TEST_ASSERT_EQUAL_UINT8(5, SMOF_SECTION_STRTAB);
-    TEST_ASSERT_EQUAL_UINT8(6, SMOF_SECTION_RELTAB);
+    /* Test section type enumeration values */
+    TEST_ASSERT_EQUAL_UINT(0, SMOF_SECTION_NULL);
+    TEST_ASSERT_EQUAL_UINT(1, SMOF_SECTION_PROGBITS);
+    TEST_ASSERT_EQUAL_UINT(2, SMOF_SECTION_SYMTAB);
+    TEST_ASSERT_EQUAL_UINT(3, SMOF_SECTION_STRTAB);
+    TEST_ASSERT_EQUAL_UINT(4, SMOF_SECTION_RELA);
+    TEST_ASSERT_EQUAL_UINT(9, SMOF_SECTION_REL);
 }
 
 void test_smof_symbol_binding_values(void) {
-    /* Verify symbol binding constants */
-    TEST_ASSERT_EQUAL_UINT8(0, SMOF_SYMBOL_BIND_LOCAL);
-    TEST_ASSERT_EQUAL_UINT8(1, SMOF_SYMBOL_BIND_GLOBAL);
-    TEST_ASSERT_EQUAL_UINT8(2, SMOF_SYMBOL_BIND_WEAK);
+    /* Test symbol binding enumeration values */
+    TEST_ASSERT_EQUAL_UINT(0, SMOF_STB_LOCAL);
+    TEST_ASSERT_EQUAL_UINT(1, SMOF_STB_GLOBAL);
+    TEST_ASSERT_EQUAL_UINT(2, SMOF_STB_WEAK);
 }
 
 void test_smof_symbol_type_values(void) {
-    /* Verify symbol type constants */
-    TEST_ASSERT_EQUAL_UINT8(0, SMOF_SYMBOL_TYPE_NOTYPE);
-    TEST_ASSERT_EQUAL_UINT8(1, SMOF_SYMBOL_TYPE_OBJECT);
-    TEST_ASSERT_EQUAL_UINT8(2, SMOF_SYMBOL_TYPE_FUNC);
-    TEST_ASSERT_EQUAL_UINT8(3, SMOF_SYMBOL_TYPE_SECTION);
+    /* Test symbol type enumeration values */
+    TEST_ASSERT_EQUAL_UINT(0, SMOF_STT_NOTYPE);
+    TEST_ASSERT_EQUAL_UINT(1, SMOF_STT_OBJECT);
+    TEST_ASSERT_EQUAL_UINT(2, SMOF_STT_FUNC);
+    TEST_ASSERT_EQUAL_UINT(3, SMOF_STT_SECTION);
+    TEST_ASSERT_EQUAL_UINT(4, SMOF_STT_FILE);
+}
+
+void test_smof_symbol_utility_functions(void) {
+    smof_symbol_t symbol;
+    uint8_t info;
+    
+    /* Test symbol info encoding/decoding */
+    info = smof_symbol_make_info(SMOF_STB_GLOBAL, SMOF_STT_FUNC);
+    symbol.info = info;
+    
+    TEST_ASSERT_EQUAL_UINT((uint32_t)SMOF_STB_GLOBAL, (uint32_t)smof_symbol_get_binding(&symbol));
+    TEST_ASSERT_EQUAL_UINT((uint32_t)SMOF_STT_FUNC, (uint32_t)smof_symbol_get_type(&symbol));
+    
+    /* Test different combinations */
+    info = smof_symbol_make_info(SMOF_STB_LOCAL, SMOF_STT_OBJECT);
+    symbol.info = info;
+    
+    TEST_ASSERT_EQUAL_UINT((uint32_t)SMOF_STB_LOCAL, (uint32_t)smof_symbol_get_binding(&symbol));
+    TEST_ASSERT_EQUAL_UINT((uint32_t)SMOF_STT_OBJECT, (uint32_t)smof_symbol_get_type(&symbol));
+}
+
+void test_smof_relocation_utility_functions(void) {
+    uint32_t info;
+    uint32_t symbol_index = 42;
+    smof_relocation_type_t rel_type = SMOF_R_32;
+    
+    /* Test relocation info encoding/decoding */
+    info = smof_relocation_make_info(symbol_index, rel_type);
+    
+    TEST_ASSERT_EQUAL_UINT(symbol_index, smof_relocation_get_symbol(info));
+    TEST_ASSERT_EQUAL_UINT((uint32_t)rel_type, (uint32_t)smof_relocation_get_type(info));
+    
+    /* Test different values */
+    symbol_index = 255;
+    rel_type = SMOF_R_PC16;
+    info = smof_relocation_make_info(symbol_index, rel_type);
+    
+    TEST_ASSERT_EQUAL_UINT(symbol_index, smof_relocation_get_symbol(info));
+    TEST_ASSERT_EQUAL_UINT((uint32_t)rel_type, (uint32_t)smof_relocation_get_type(info));
 }
 
 int test_smof_main(void) {
@@ -181,20 +164,16 @@ int test_smof_main(void) {
     
     RUN_TEST(test_smof_validate_header_valid);
     RUN_TEST(test_smof_validate_header_invalid_magic);
-    RUN_TEST(test_smof_validate_header_null_data);
+    RUN_TEST(test_smof_validate_header_invalid_version);
     RUN_TEST(test_smof_validate_header_null_header);
-    RUN_TEST(test_smof_validate_header_insufficient_size);
-    RUN_TEST(test_smof_validate_header_version_check);
-    RUN_TEST(test_smof_validate_file_valid);
-    RUN_TEST(test_smof_validate_file_invalid);
-    RUN_TEST(test_smof_validate_file_null_data);
-    RUN_TEST(test_smof_validate_file_zero_size);
     RUN_TEST(test_smof_get_header_size);
     RUN_TEST(test_smof_header_alignment);
     RUN_TEST(test_smof_magic_constant);
     RUN_TEST(test_smof_section_type_values);
     RUN_TEST(test_smof_symbol_binding_values);
     RUN_TEST(test_smof_symbol_type_values);
+    RUN_TEST(test_smof_symbol_utility_functions);
+    RUN_TEST(test_smof_relocation_utility_functions);
     
     return UNITY_END();
 }

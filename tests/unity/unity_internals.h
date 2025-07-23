@@ -23,8 +23,6 @@ extern "C" {
 /* Internal state tracking */
 /* Unity internal structure - defined in unity.h */
 
-extern unity_internals_t Unity;
-
 /* Internal helper functions */
 void unity_add_number(const int32_t number, const unity_display_style_t style);
 void unity_print_expected_and_actual_strings(const char* expected, const char* actual);

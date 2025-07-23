@@ -32,15 +32,11 @@ static void error_callback(const error_context_t* context) {
 }
 
 int main(int argc, char* argv[]) {
-    /* Set up error handling */
-    error_set_callback(error_callback);
-    
     /* Command line options */
     bool verbose = false;
     bool show_symbols = false;
     bool show_compression = false;
     const char* filename = NULL;
-    
     static struct option long_options[] = {
         {"verbose",  no_argument, 0, 'v'},
         {"symbols",  no_argument, 0, 's'},
@@ -49,9 +45,19 @@ int main(int argc, char* argv[]) {
         {"version",  no_argument, 0, 1002},
         {0, 0, 0, 0}
     };
+    int opt;
+    star_options_t options;
+    star_context_t* context;
+    int result;
+    star_stats_t stats;
+    star_member_info_t* members;
+    size_t member_count = 1000;
+    size_t i;
+    
+    /* Set up error handling */
+    error_set_callback(error_callback);
     
     /* Parse options */
-    int opt;
     while ((opt = getopt_long(argc, argv, "vsc", long_options, NULL)) != -1) {
         switch (opt) {
             case 'v':
@@ -85,10 +91,10 @@ int main(int argc, char* argv[]) {
     filename = argv[optind];
     
     /* Create context */
-    star_options_t options = star_get_default_options();
+    options = star_get_default_options();
     options.verbose = verbose;
     
-    star_context_t* context = star_context_create(&options);
+    context = star_context_create(&options);
     if (context == NULL) {
         fprintf(stderr, "Error: Failed to create archiver context\n");
         return EXIT_FAILURE;
@@ -98,8 +104,7 @@ int main(int argc, char* argv[]) {
     printf("=" "============================================\n");
     
     /* Get archive statistics */
-    star_stats_t stats;
-    int result = star_get_stats(context, filename, &stats);
+    result = star_get_stats(context, filename, &stats);
     if (result == 0) {
         printf("Members:        %zu\n", stats.member_count);
         printf("Total Size:     %zu bytes\n", stats.total_size);
@@ -114,11 +119,11 @@ int main(int argc, char* argv[]) {
     }
     
     /* List members */
-    star_member_info_t* members = malloc(1000 * sizeof(star_member_info_t));
-    size_t count = 1000;
+    members = malloc(1000 * sizeof(star_member_info_t));
+    member_count = 1000;
     
     if (members != NULL) {
-        result = star_list_archive(context, filename, members, &count);
+        result = star_list_archive(context, filename, members, &member_count);
         if (result == 0) {
             if (verbose) {
                 printf("%-32s %10s %10s %10s %s\n", 
@@ -129,15 +134,17 @@ int main(int argc, char* argv[]) {
                 printf("Members:\n");
             }
             
-            for (size_t i = 0; i < count; i++) {
+            for (i = 0; i < member_count; i++) {
                 if (verbose) {
                     double ratio = 0.0;
+                    char time_str[64];
+                    struct tm* tm_info;
+                    
                     if (members[i].size > 0) {
                         ratio = (1.0 - (double)members[i].compressed_size / (double)members[i].size) * 100.0;
                     }
                     
-                    char time_str[64];
-                    struct tm* tm_info = localtime(&members[i].timestamp);
+                    tm_info = localtime(&members[i].timestamp);
                     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M", tm_info);
                     
                     printf("%-32s %10u %10u %9.1f%% %s\n",
@@ -155,10 +162,17 @@ int main(int argc, char* argv[]) {
         free(members);
     }
     
-    /* TODO: Implement symbol index listing */
+    /* Show symbol index */
     if (show_symbols) {
         printf("\nSymbol Index:\n");
-        /* Implementation will be added when symbol index is implemented */
+        printf("  Symbol index functionality not yet implemented\n");
+    }
+    
+    /* Show compression details */
+    if (show_compression) {
+        printf("\nCompression Details:\n");
+        printf("  Detailed compression info not yet implemented\n");
+        printf("  Basic compression stats shown above\n");
     }
     
     /* Cleanup */

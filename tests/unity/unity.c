@@ -228,9 +228,9 @@ void unity_test_assert_equal_hex32(const uint32_t expected,
     if (expected != actual) {
         Unity.CurrentTestFailed = 1;
         unity_print("Expected ");
-        unity_print_number(expected, UNITY_DISPLAY_STYLE_HEX32);
+        unity_print_number((int32_t)expected, UNITY_DISPLAY_STYLE_HEX32);
         unity_print(" Was ");
-        unity_print_number(actual, UNITY_DISPLAY_STYLE_HEX32);
+        unity_print_number((int32_t)actual, UNITY_DISPLAY_STYLE_HEX32);
         
         if (msg != NULL) {
             unity_print(" - ");

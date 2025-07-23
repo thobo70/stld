@@ -10,6 +10,24 @@
  * @details Tests memory pool allocation, deallocation, and alignment
  */
 
+/* Function prototypes */
+void test_memory_pool_create(void);
+void test_memory_pool_create_invalid_size(void);
+void test_memory_pool_alloc(void);
+void test_memory_pool_alloc_null_pool(void);
+void test_memory_pool_alloc_zero_size(void);
+void test_memory_pool_alloc_too_large(void);
+void test_memory_pool_free(void);
+void test_memory_pool_free_null_ptr(void);
+void test_memory_pool_free_null_pool(void);
+void test_memory_pool_reset(void);
+void test_memory_pool_calloc(void);
+void test_memory_pool_get_stats(void);
+void test_memory_pool_fragmentation(void);
+void test_memory_utility_functions(void);
+void test_memory_pool_inline_functions(void);
+int test_memory_main(void);
+
 /* Test pool for testing */
 static memory_pool_t* test_pool;
 
@@ -30,8 +48,8 @@ void test_memory_pool_create(void) {
     memory_pool_t* pool = memory_pool_create(512);
     
     TEST_ASSERT_NOT_NULL(pool);
-    TEST_ASSERT_EQUAL_UINT(512, memory_pool_get_size(pool));
-    TEST_ASSERT_EQUAL_UINT(0, memory_pool_get_used(pool));
+    TEST_ASSERT_EQUAL_UINT((uint32_t)512, (uint32_t)memory_pool_get_size(pool));
+    TEST_ASSERT_EQUAL_UINT((uint32_t)0, (uint32_t)memory_pool_get_used(pool));
     TEST_ASSERT_TRUE(memory_pool_get_available(pool) > 0);
     
     memory_pool_destroy(pool);
@@ -39,7 +57,7 @@ void test_memory_pool_create(void) {
 
 void test_memory_pool_create_invalid_size(void) {
     memory_pool_t* pool1 = memory_pool_create(0);
-    memory_pool_t* pool2 = memory_pool_create(MEMORY_POOL_MAX_SIZE + 1);
+    memory_pool_t* pool2 = memory_pool_create(SIZE_MAX);
     
     TEST_ASSERT_NULL(pool1);
     TEST_ASSERT_NULL(pool2);
@@ -54,8 +72,8 @@ void test_memory_pool_alloc(void) {
     TEST_ASSERT_TRUE(ptr1 != ptr2);
     
     /* Check alignment */
-    TEST_ASSERT_TRUE(memory_is_aligned(ptr1, MEMORY_POOL_ALIGN));
-    TEST_ASSERT_TRUE(memory_is_aligned(ptr2, MEMORY_POOL_ALIGN));
+    TEST_ASSERT_EQUAL_UINT(0, ((uintptr_t)ptr1) % MEMORY_POOL_ALIGN);
+    TEST_ASSERT_EQUAL_UINT(0, ((uintptr_t)ptr2) % MEMORY_POOL_ALIGN);
 }
 
 void test_memory_pool_alloc_null_pool(void) {
@@ -77,15 +95,22 @@ void test_memory_pool_alloc_too_large(void) {
 }
 
 void test_memory_pool_free(void) {
-    void* ptr = memory_pool_alloc(test_pool, 64);
+    void* ptr;
+    size_t used_before;
+    void* ptr2;
+    
+    ptr = memory_pool_alloc(test_pool, 64);
     TEST_ASSERT_NOT_NULL(ptr);
     
-    size_t used_before = memory_pool_get_used(test_pool);
+    used_before = memory_pool_get_used(test_pool);
     memory_pool_free(test_pool, ptr);
     
     /* Memory should be available for reuse */
-    void* ptr2 = memory_pool_alloc(test_pool, 64);
+    ptr2 = memory_pool_alloc(test_pool, 64);
     TEST_ASSERT_NOT_NULL(ptr2);
+    
+    /* Suppress unused variable warning */
+    (void)used_before;
 }
 
 void test_memory_pool_free_null_ptr(void) {
@@ -101,8 +126,12 @@ void test_memory_pool_free_null_pool(void) {
 }
 
 void test_memory_pool_reset(void) {
-    void* ptr1 = memory_pool_alloc(test_pool, 64);
-    void* ptr2 = memory_pool_alloc(test_pool, 128);
+    void* ptr1;
+    void* ptr2;
+    void* ptr3;
+    
+    ptr1 = memory_pool_alloc(test_pool, 64);
+    ptr2 = memory_pool_alloc(test_pool, 128);
     
     TEST_ASSERT_NOT_NULL(ptr1);
     TEST_ASSERT_NOT_NULL(ptr2);
@@ -110,63 +139,78 @@ void test_memory_pool_reset(void) {
     
     memory_pool_reset(test_pool);
     
-    TEST_ASSERT_EQUAL_UINT(0, memory_pool_get_used(test_pool));
+    TEST_ASSERT_EQUAL_UINT((uint32_t)0, (uint32_t)memory_pool_get_used(test_pool));
     
     /* Should be able to allocate again */
-    void* ptr3 = memory_pool_alloc(test_pool, 256);
+    ptr3 = memory_pool_alloc(test_pool, 256);
     TEST_ASSERT_NOT_NULL(ptr3);
 }
 
 void test_memory_pool_calloc(void) {
-    uint32_t* array = (uint32_t*)memory_pool_calloc(test_pool, 10, sizeof(uint32_t));
+    uint32_t* array;
+    int i;
+    
+    array = (uint32_t*)memory_pool_calloc(test_pool, 10, sizeof(uint32_t));
     
     TEST_ASSERT_NOT_NULL(array);
     
     /* Check that memory is zeroed */
-    for (int i = 0; i < 10; i++) {
+    for (i = 0; i < 10; i++) {
         TEST_ASSERT_EQUAL_UINT(0, array[i]);
     }
 }
 
 void test_memory_pool_get_stats(void) {
     memory_pool_stats_t stats;
+    void* ptr1;
+    void* ptr2;
     
-    void* ptr1 = memory_pool_alloc(test_pool, 64);
-    void* ptr2 = memory_pool_alloc(test_pool, 128);
+    ptr1 = memory_pool_alloc(test_pool, 64);
+    ptr2 = memory_pool_alloc(test_pool, 128);
     
     memory_pool_get_stats(test_pool, &stats);
     
-    TEST_ASSERT_EQUAL_UINT(1024, stats.total_size);
+    TEST_ASSERT_EQUAL_UINT((uint32_t)1024, (uint32_t)stats.total_size);
     TEST_ASSERT_TRUE(stats.used_size > 0);
     TEST_ASSERT_TRUE(stats.allocations >= 2);
-    TEST_ASSERT_EQUAL_UINT(MEMORY_POOL_ALIGN, stats.alignment);
+    TEST_ASSERT_EQUAL_UINT((uint32_t)MEMORY_POOL_ALIGN, (uint32_t)stats.alignment);
+    
+    /* Suppress unused variable warnings */
+    (void)ptr1;
+    (void)ptr2;
 }
 
 void test_memory_pool_fragmentation(void) {
     /* Allocate several blocks */
     void* ptrs[5];
-    for (int i = 0; i < 5; i++) {
+    int i;
+    void* small_ptr;
+    
+    for (i = 0; i < 5; i++) {
         ptrs[i] = memory_pool_alloc(test_pool, 32);
         TEST_ASSERT_NOT_NULL(ptrs[i]);
     }
     
-    /* Deallocate every other block */
+    /* Free every other block */
     memory_pool_free(test_pool, ptrs[1]);
     memory_pool_free(test_pool, ptrs[3]);
     
     /* Should still be able to allocate small blocks */
-    void* small_ptr = memory_pool_alloc(test_pool, 16);
+    small_ptr = memory_pool_alloc(test_pool, 16);
     TEST_ASSERT_NOT_NULL(small_ptr);
 }
 
 void test_memory_utility_functions(void) {
     /* Test alignment utilities */
     char buffer[100];
-    void* aligned = memory_align_ptr(buffer, 8);
+    void* aligned;
+    size_t aligned_size;
+    
+    aligned = memory_align_ptr(buffer, 8);
     TEST_ASSERT_NOT_NULL(aligned);
     TEST_ASSERT_TRUE(memory_is_aligned(aligned, 8));
     
-    size_t aligned_size = memory_align_size(10, 8);
+    aligned_size = memory_align_size(10, 8);
     TEST_ASSERT_TRUE(aligned_size >= 10);
     TEST_ASSERT_EQUAL_UINT(0, aligned_size % 8);
 }
