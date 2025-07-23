@@ -1,52 +1,213 @@
-# Makefile for STLD/STAR project
-# C99 compliant build system
+# Main Makefile for STLD/STAR project
+# C99 compliance and cross-platform support
 
-# Project configuration
+# Include configuration
+include config.mk
+include Rules.mk
+
+# Project information
 PROJECT_NAME := stld-star
 VERSION := 1.0.0
-
-# Directories
-SRC_DIR := src
-BUILD_DIR := build
-TEST_DIR := tests
-DOC_DIR := docs
-
-# Compiler settings
-CC := gcc
-CFLAGS := -std=c99 -Wall -Wextra -Wpedantic -O2
-CFLAGS_DEBUG := -std=c99 -Wall -Wextra -Wpedantic -g -DDEBUG
-CFLAGS_COVERAGE := $(CFLAGS_DEBUG) --coverage
-
-# Standard compliance
-C_STANDARD := c99
-POSIX_FLAGS := -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
-
-# Include directories
-INCLUDES := -Isrc/common/include -Isrc/stld/include -Isrc/star/include
-
-# Libraries
-LIBS := -lm
-
-# Source files (will be populated when actual source is created)
-COMMON_SRCS := $(wildcard src/common/*.c)
-STLD_SRCS := $(wildcard src/stld/*.c)
-STAR_SRCS := $(wildcard src/star/*.c)
-TEST_SRCS := $(wildcard tests/*.c)
-
-# Object files
-COMMON_OBJS := $(COMMON_SRCS:src/%.c=$(BUILD_DIR)/%.o)
-STLD_OBJS := $(STLD_SRCS:src/%.c=$(BUILD_DIR)/%.o)
-STAR_OBJS := $(STAR_SRCS:src/%.c=$(BUILD_DIR)/%.o)
-TEST_OBJS := $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%.o)
-
-# Binaries
-STLD_BIN := $(BUILD_DIR)/stld
-STAR_BIN := $(BUILD_DIR)/star
-TEST_BIN := $(BUILD_DIR)/test_runner
+BUILD_DATE := $(shell date -u +"%Y-%m-%d %H:%M:%S UTC")
 
 # Default target
 .PHONY: all
-all: directories $(STLD_BIN) $(STAR_BIN)
+all: build-info stld star tools
+
+# Main targets
+.PHONY: stld star tools tests test-all test-memory test-smof test-error test-integration clean install coverage docs
+
+stld: $(BUILD_DIR)/stld_exe
+star: $(BUILD_DIR)/star_exe
+tools: $(BUILD_DIR)/smof_dump $(BUILD_DIR)/star_list
+
+# Library targets
+$(BUILD_DIR)/libcommon.a: $(COMMON_OBJS)
+	@mkdir -p $(dir $@)
+	$(call print_info,Creating common library)
+	$(Q)$(AR) $(ARFLAGS) $@ $^
+	$(Q)$(RANLIB) $@
+
+$(BUILD_DIR)/libstld.a: $(STLD_OBJS) $(BUILD_DIR)/libcommon.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Creating STLD library)
+	$(Q)$(AR) $(ARFLAGS) $@ $(STLD_OBJS)
+	$(Q)$(RANLIB) $@
+
+$(BUILD_DIR)/libstar.a: $(STAR_OBJS) $(BUILD_DIR)/libcommon.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Creating STAR library)
+	$(Q)$(AR) $(ARFLAGS) $@ $(STAR_OBJS)
+	$(Q)$(RANLIB) $@
+
+# Executable targets
+$(BUILD_DIR)/stld_exe: $(SRC_DIR)/stld/main.c $(BUILD_DIR)/libstld.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Linking STLD executable)
+	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $< -L$(BUILD_DIR) -lstld -lcommon
+
+$(BUILD_DIR)/star_exe: $(SRC_DIR)/star/main.c $(BUILD_DIR)/libstar.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Linking STAR executable)
+	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $< -L$(BUILD_DIR) -lstar -lcommon
+
+# Tool targets
+$(BUILD_DIR)/smof_dump: $(TOOLS_DIR)/smof_dump.c $(BUILD_DIR)/libcommon.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Building SMOF dump tool)
+	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $< -L$(BUILD_DIR) -lcommon
+
+$(BUILD_DIR)/star_list: $(TOOLS_DIR)/star_list.c $(BUILD_DIR)/libstar.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Building STAR list tool)
+	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $< -L$(BUILD_DIR) -lstar -lcommon
+
+# Test targets
+tests: $(BUILD_DIR)/test_runner
+	$(call print_info,Running test suite)
+	$(Q)$(BUILD_DIR)/test_runner
+
+# Individual test executables
+$(BUILD_DIR)/test_memory: $(BUILD_DIR)/tests/test_memory.o $(BUILD_DIR)/tests/unity/unity.o $(BUILD_DIR)/libcommon.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Building memory test)
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/test_smof: $(BUILD_DIR)/tests/test_smof.o $(BUILD_DIR)/tests/unity/unity.o $(BUILD_DIR)/libcommon.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Building SMOF test)
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/test_error: $(BUILD_DIR)/tests/test_error.o $(BUILD_DIR)/tests/unity/unity.o $(BUILD_DIR)/libcommon.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Building error test)
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/test_integration: $(BUILD_DIR)/tests/test_integration.o $(BUILD_DIR)/tests/unity/unity.o $(BUILD_DIR)/libstld.a $(BUILD_DIR)/libcommon.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Building integration test)
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(BUILD_DIR)/tests/unity/unity.o -L$(BUILD_DIR) -lstld -lcommon
+
+# Run individual tests
+test-memory: $(BUILD_DIR)/test_memory
+	$(call print_info,Running memory tests)
+	$(Q)$(BUILD_DIR)/test_memory
+
+test-smof: $(BUILD_DIR)/test_smof
+	$(call print_info,Running SMOF tests)
+	$(Q)$(BUILD_DIR)/test_smof
+
+test-error: $(BUILD_DIR)/test_error
+	$(call print_info,Running error tests)
+	$(Q)$(BUILD_DIR)/test_error
+
+test-integration: $(BUILD_DIR)/test_integration
+	$(call print_info,Running integration tests)
+	$(Q)$(BUILD_DIR)/test_integration
+
+# Run all individual tests
+test-all: test-memory test-smof test-error test-integration
+	$(call print_success,All individual tests passed!)
+
+$(BUILD_DIR)/test_runner: $(TEST_OBJS) $(BUILD_DIR)/libstld.a $(BUILD_DIR)/libstar.a
+	@mkdir -p $(dir $@)
+	$(call print_info,Linking test runner)
+	$(Q)$(CC) $(CFLAGS) $(TEST_LDFLAGS) -o $@ $(TEST_OBJS) \
+		-L$(BUILD_DIR) -lstld -lstar -lcommon $(UNICORN_LIBS)
+
+# Coverage analysis
+coverage: CFLAGS += --coverage
+coverage: LDFLAGS += --coverage
+coverage: clean tests
+	$(call print_info,Generating coverage report)
+	@mkdir -p $(COVERAGE_DIR)
+	$(Q)lcov --capture --directory $(BUILD_DIR) --output-file $(COVERAGE_DIR)/coverage.info
+	$(Q)lcov --remove $(COVERAGE_DIR)/coverage.info '/usr/*' --output-file $(COVERAGE_DIR)/coverage.info
+	$(Q)lcov --list $(COVERAGE_DIR)/coverage.info
+	$(Q)genhtml $(COVERAGE_DIR)/coverage.info --output-directory $(COVERAGE_DIR)/html
+	$(call print_success,Coverage report generated in $(COVERAGE_DIR)/html/index.html)
+
+# Documentation
+docs:
+	$(call print_info,Generating documentation)
+	@mkdir -p $(DOCS_DIR)/api
+	$(Q)doxygen $(DOCS_DIR)/Doxyfile
+
+# Static analysis
+static-analysis:
+	$(call print_info,Running static analysis)
+	$(Q)$(TOOLS_DIR)/static_analysis.sh
+
+# Installation
+install: all
+	$(call print_info,Installing to $(PREFIX))
+	$(Q)install -d $(DESTDIR)$(PREFIX)/bin
+	$(Q)install -d $(DESTDIR)$(PREFIX)/lib
+	$(Q)install -d $(DESTDIR)$(PREFIX)/include/stld
+	$(Q)install -d $(DESTDIR)$(PREFIX)/include/star
+	$(Q)install -m 755 $(BUILD_DIR)/stld $(DESTDIR)$(PREFIX)/bin/
+	$(Q)install -m 755 $(BUILD_DIR)/star $(DESTDIR)$(PREFIX)/bin/
+	$(Q)install -m 755 $(BUILD_DIR)/smof_dump $(DESTDIR)$(PREFIX)/bin/
+	$(Q)install -m 755 $(BUILD_DIR)/star_list $(DESTDIR)$(PREFIX)/bin/
+	$(Q)install -m 644 $(BUILD_DIR)/libstld.a $(DESTDIR)$(PREFIX)/lib/
+	$(Q)install -m 644 $(BUILD_DIR)/libstar.a $(DESTDIR)$(PREFIX)/lib/
+	$(Q)install -m 644 $(BUILD_DIR)/libcommon.a $(DESTDIR)$(PREFIX)/lib/
+	$(Q)cp -r $(SRC_DIR)/stld/include/* $(DESTDIR)$(PREFIX)/include/stld/
+	$(Q)cp -r $(SRC_DIR)/star/include/* $(DESTDIR)$(PREFIX)/include/star/
+	$(Q)cp -r $(SRC_DIR)/common/include/* $(DESTDIR)$(PREFIX)/include/
+
+# Clean
+clean:
+	$(call print_info,Cleaning build artifacts)
+	$(Q)rm -rf $(BUILD_DIR) $(COVERAGE_DIR)
+
+distclean: clean
+	$(call print_info,Cleaning all generated files)
+	$(Q)rm -rf docs/html coverage.info
+	$(call print_success,All generated files cleaned)
+
+# Pattern rules for object files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(call print_info,Compiling $(notdir $<))
+	$(Q)$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(call print_info,Compiling test $(notdir $<))
+	$(Q)$(CC) $(CFLAGS) $(TEST_CPPFLAGS) -c -o $@ $<
+
+# Dependencies
+-include $(DEPS)
+
+# C99 compliance check
+check-c99:
+	$(call print_info,Checking C99 compliance)
+	$(Q)$(CC) $(CSTD) -fsyntax-only -pedantic -Werror $(SRC_DIR)/common/include/*.h
+	$(Q)$(CC) $(CSTD) -fsyntax-only -pedantic -Werror $(SRC_DIR)/stld/include/*.h
+	$(Q)$(CC) $(CSTD) -fsyntax-only -pedantic -Werror $(SRC_DIR)/star/include/*.h
+	$(call print_success,C99 compliance check passed)
+
+# Help target
+help:
+	@echo "Available targets:"
+	@echo "  all           - Build all components"
+	@echo "  stld          - Build STLD linker"
+	@echo "  star          - Build STAR archiver"
+	@echo "  tools         - Build utility tools"
+	@echo "  tests         - Run test suite"
+	@echo "  test-all      - Run all individual tests"
+	@echo "  test-memory   - Run memory pool tests"
+	@echo "  test-smof     - Run SMOF format tests"
+	@echo "  test-error    - Run error handling tests"
+	@echo "  test-integration - Run integration tests"
+	@echo "  coverage      - Generate coverage report"
+	@echo "  docs          - Generate documentation"
+	@echo "  static-analysis - Run static analysis"
+	@echo "  install       - Install to system"
+	@echo "  clean         - Clean build artifacts"
+	@echo "  check-c99     - Check C99 compliance"
+	@echo "  help          - Show this help"
 
 # Create build directories
 .PHONY: directories
@@ -55,176 +216,3 @@ directories:
 	@mkdir -p $(BUILD_DIR)/src/stld
 	@mkdir -p $(BUILD_DIR)/src/star
 	@mkdir -p $(BUILD_DIR)/tests
-
-# STLD linker binary
-$(STLD_BIN): $(COMMON_OBJS) $(STLD_OBJS)
-	@echo "Linking STLD..."
-	@$(CC) $(CFLAGS) $(POSIX_FLAGS) $^ -o $@ $(LIBS)
-
-# STAR archiver binary
-$(STAR_BIN): $(COMMON_OBJS) $(STAR_OBJS)
-	@echo "Linking STAR..."
-	@$(CC) $(CFLAGS) $(POSIX_FLAGS) $^ -o $@ $(LIBS)
-
-# Test runner
-$(TEST_BIN): $(COMMON_OBJS) $(TEST_OBJS)
-	@echo "Linking test runner..."
-	@$(CC) $(CFLAGS_DEBUG) $(POSIX_FLAGS) $^ -o $@ $(LIBS)
-
-# Compile source files
-$(BUILD_DIR)/src/%.o: src/%.c
-	@echo "Compiling $<..."
-	@$(CC) $(CFLAGS) $(POSIX_FLAGS) $(INCLUDES) -c $< -o $@
-
-# Compile test files
-$(BUILD_DIR)/tests/%.o: tests/%.c
-	@echo "Compiling test $<..."
-	@$(CC) $(CFLAGS_DEBUG) $(POSIX_FLAGS) $(INCLUDES) -c $< -o $@
-
-# Development targets
-.PHONY: debug
-debug: CFLAGS = $(CFLAGS_DEBUG)
-debug: all
-
-.PHONY: release
-release: CFLAGS = -std=c99 -Wall -Wextra -Wpedantic -O3 -DNDEBUG
-release: all
-
-# Testing targets
-.PHONY: tests
-tests: $(TEST_BIN)
-	@echo "Running tests..."
-	@./$(TEST_BIN)
-
-.PHONY: check
-check: tests
-
-# Code quality targets
-.PHONY: check-c99
-check-c99:
-	@echo "Checking C99 compliance..."
-	@if [ -n "$(COMMON_SRCS)$(STLD_SRCS)$(STAR_SRCS)" ]; then \
-		for file in $(COMMON_SRCS) $(STLD_SRCS) $(STAR_SRCS); do \
-			echo "Checking $$file..."; \
-			$(CC) -std=c99 -fsyntax-only -Wall -Wextra -Wpedantic $(POSIX_FLAGS) $(INCLUDES) "$$file" || exit 1; \
-		done; \
-		echo "✓ All source files are C99 compliant"; \
-	else \
-		echo "⚠ No source files found to check"; \
-	fi
-
-.PHONY: static-analysis
-static-analysis:
-	@echo "Running static analysis..."
-	@if command -v cppcheck >/dev/null 2>&1; then \
-		if [ -n "$(COMMON_SRCS)$(STLD_SRCS)$(STAR_SRCS)" ]; then \
-			cppcheck --std=c99 --enable=all --inconclusive --suppress=missingIncludeSystem $(INCLUDES) $(COMMON_SRCS) $(STLD_SRCS) $(STAR_SRCS); \
-		else \
-			echo "⚠ No source files found for static analysis"; \
-		fi \
-	else \
-		echo "⚠ cppcheck not found, skipping static analysis"; \
-	fi
-
-.PHONY: format
-format:
-	@echo "Formatting code..."
-	@if command -v clang-format >/dev/null 2>&1; then \
-		find src tests -name "*.c" -o -name "*.h" | xargs clang-format -i -style="{BasedOnStyle: LLVM, IndentWidth: 4, ColumnLimit: 80}"; \
-		echo "✓ Code formatted"; \
-	else \
-		echo "⚠ clang-format not found, skipping formatting"; \
-	fi
-
-# Coverage targets
-.PHONY: coverage
-coverage: CFLAGS = $(CFLAGS_COVERAGE)
-coverage: clean tests
-	@echo "Generating coverage report..."
-	@if command -v lcov >/dev/null 2>&1; then \
-		lcov --capture --directory $(BUILD_DIR) --output-file coverage.info; \
-		lcov --remove coverage.info '/usr/*' --output-file coverage.info; \
-		lcov --remove coverage.info '*/tests/*' --output-file coverage.info; \
-		genhtml coverage.info --output-directory coverage; \
-		echo "✓ Coverage report generated in coverage/index.html"; \
-	else \
-		echo "⚠ lcov not found, skipping coverage report"; \
-	fi
-
-# Documentation targets
-.PHONY: docs
-docs:
-	@echo "Generating documentation..."
-	@if command -v doxygen >/dev/null 2>&1; then \
-		doxygen Doxyfile 2>/dev/null || echo "⚠ Doxyfile not found, skipping documentation"; \
-	else \
-		echo "⚠ doxygen not found, skipping documentation"; \
-	fi
-
-# Install targets
-.PHONY: install
-install: $(STLD_BIN) $(STAR_BIN)
-	@echo "Installing binaries..."
-	@install -d $(DESTDIR)/usr/local/bin
-	@install -m 755 $(STLD_BIN) $(DESTDIR)/usr/local/bin/
-	@install -m 755 $(STAR_BIN) $(DESTDIR)/usr/local/bin/
-	@echo "✓ Installed to $(DESTDIR)/usr/local/bin/"
-
-.PHONY: uninstall
-uninstall:
-	@echo "Uninstalling binaries..."
-	@rm -f $(DESTDIR)/usr/local/bin/stld
-	@rm -f $(DESTDIR)/usr/local/bin/star
-	@echo "✓ Uninstalled"
-
-# Clean targets
-.PHONY: clean
-clean:
-	@echo "Cleaning build files..."
-	@rm -rf $(BUILD_DIR)
-	@rm -f coverage.info
-	@rm -rf coverage
-	@echo "✓ Build directory cleaned"
-
-.PHONY: distclean
-distclean: clean
-	@echo "Cleaning all generated files..."
-	@rm -rf docs/html
-	@echo "✓ All generated files cleaned"
-
-# Help target
-.PHONY: help
-help:
-	@echo "STLD/STAR Build System"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  all           - Build STLD and STAR binaries (default)"
-	@echo "  debug         - Build with debug symbols"
-	@echo "  release       - Build optimized release version"
-	@echo "  tests         - Build and run tests"
-	@echo "  check         - Alias for tests"
-	@echo "  check-c99     - Check C99 compliance"
-	@echo "  static-analysis - Run static analysis with cppcheck"
-	@echo "  format        - Format code with clang-format"
-	@echo "  coverage      - Generate code coverage report"
-	@echo "  docs          - Generate documentation with doxygen"
-	@echo "  install       - Install binaries to system"
-	@echo "  uninstall     - Remove installed binaries"
-	@echo "  clean         - Clean build files"
-	@echo "  distclean     - Clean all generated files"
-	@echo "  help          - Show this help message"
-	@echo ""
-	@echo "Variables:"
-	@echo "  CC            - Compiler (default: gcc)"
-	@echo "  DESTDIR       - Installation prefix"
-	@echo ""
-
-# Dependency generation
--include $(BUILD_DIR)/src/common/*.d
--include $(BUILD_DIR)/src/stld/*.d
--include $(BUILD_DIR)/src/star/*.d
--include $(BUILD_DIR)/tests/*.d
-
-# Generate dependency files
-$(BUILD_DIR)/%.d: %.c
-	@$(CC) $(CFLAGS) $(POSIX_FLAGS) $(INCLUDES) -MM -MT $(@:.d=.o) $< > $@

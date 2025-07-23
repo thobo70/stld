@@ -1,0 +1,84 @@
+# Build artifacts and temporary files
+build/
+coverage/
+analysis/
+
+# Object files and libraries
+*.o
+*.a
+*.so
+*.exe
+*.dll
+
+# Debug and profiling files
+*.gcno
+*.gcda
+*.gcov
+gmon.out
+
+# Documentation output
+docs/api/
+docs/html/
+
+# Test results
+test_results.xml
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+core
+
+# Package manager files
+node_modules/
+*.tar.gz
+*.zip
+
+# Development environment
+.env
+*.local
+
+# Compiled binaries
+stld
+star
+smof_dump
+star_list
+test_runner
+
+# Memory debugging
+*.asan
+*.msan
+*.tsan
+valgrind.log
+
+# Static analysis
+cppcheck.xml
+scan-build-*/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS generated files
+.Trash-*
+ehthumbs.db
+
+# Certificate and key files
+*.pem
+*.key
+*.crt
+
+# Distribution packages
+dist/
+*.deb
+*.rpm
