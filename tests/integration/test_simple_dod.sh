@@ -76,9 +76,9 @@ create_mock_smof_files() {
         printf "\x00\x00\x00\x00"  # Entry point: 0
         printf "\x02\x00"          # Section count: 2 (.text, .data)
         printf "\x01\x00"          # Symbol count: 1 (_start)
-        printf "\x28\x00\x00\x00"  # Section table offset: 40 (after header)
-        printf "\x58\x00\x00\x00"  # Symbol table offset: 88
-        printf "\x6C\x00\x00\x00"  # String table offset: 108
+        printf "\x20\x00\x00\x00"  # Section table offset: 32 (after header)
+        printf "\x70\x00\x00\x00"  # Symbol table offset: 112
+        printf "\x84\x00\x00\x00"  # String table offset: 132
         printf "\x00\x00\x00\x00"  # Checksum: 0 (simplified)
         
         # Section Table (2 sections × 40 bytes = 80 bytes)
@@ -87,7 +87,7 @@ create_mock_smof_files() {
         printf "\x01\x00\x00\x00"  # type: PROGBITS
         printf "\x06\x00\x00\x00"  # flags: ALLOC | EXECINSTR  
         printf "\x00\x00\x00\x00"  # address
-        printf "\x80\x00\x00\x00"  # offset: 128 (after string table)
+        printf "\x98\x00\x00\x00"  # offset: 152 (after string table)
         printf "\x20\x00\x00\x00"  # size: 32 bytes
         printf "\x00\x00\x00\x00"  # link: 0
         printf "\x00\x00\x00\x00"  # info: 0
@@ -99,7 +99,7 @@ create_mock_smof_files() {
         printf "\x01\x00\x00\x00"  # type: PROGBITS
         printf "\x03\x00\x00\x00"  # flags: ALLOC | WRITE
         printf "\x20\x00\x00\x00"  # address: 32 (after .text)
-        printf "\xA0\x00\x00\x00"  # offset: 160
+        printf "\xB8\x00\x00\x00"  # offset: 184 (after .text section)
         printf "\x10\x00\x00\x00"  # size: 16 bytes
         printf "\x00\x00\x00\x00"  # link: 0
         printf "\x00\x00\x00\x00"  # info: 0
@@ -147,9 +147,9 @@ create_mock_smof_files() {
         printf "\x00\x00\x00\x00"  # Entry point: 0
         printf "\x01\x00"          # Section count: 1 (.text only)
         printf "\x01\x00"          # Symbol count: 1 (hello)
-        printf "\x28\x00\x00\x00"  # Section table offset: 40
-        printf "\x50\x00\x00\x00"  # Symbol table offset: 80
-        printf "\x64\x00\x00\x00"  # String table offset: 100
+        printf "\x20\x00\x00\x00"  # Section table offset: 32
+        printf "\x48\x00\x00\x00"  # Symbol table offset: 72 (32 + 40)
+        printf "\x5C\x00\x00\x00"  # String table offset: 92 (72 + 20)
         printf "\x00\x00\x00\x00"  # Checksum: 0
         
         # Section Table (.text only)
@@ -157,7 +157,7 @@ create_mock_smof_files() {
         printf "\x01\x00\x00\x00"  # type: PROGBITS
         printf "\x06\x00\x00\x00"  # flags: ALLOC | EXECINSTR
         printf "\x00\x00\x00\x00"  # address
-        printf "\x6C\x00\x00\x00"  # offset: 108
+        printf "\x64\x00\x00\x00"  # offset: 100 (after string table at 92 + 8)
         printf "\x18\x00\x00\x00"  # size: 24 bytes
         printf "\x00\x00\x00\x00"  # link: 0
         printf "\x00\x00\x00\x00"  # info: 0
@@ -198,9 +198,9 @@ create_mock_smof_files() {
         printf "\x00\x00\x00\x00"  # Entry point: 0
         printf "\x01\x00"          # Section count: 1
         printf "\x02\x00"          # Symbol count: 2
-        printf "\x28\x00\x00\x00"  # Section table offset: 40
-        printf "\x50\x00\x00\x00"  # Symbol table offset: 80
-        printf "\x78\x00\x00\x00"  # String table offset: 120
+        printf "\x20\x00\x00\x00"  # Section table offset: 32
+        printf "\x48\x00\x00\x00"  # Symbol table offset: 72 (32 + 40)
+        printf "\x70\x00\x00\x00"  # String table offset: 112 (72 + 40 for 2 symbols)
         printf "\x00\x00\x00\x00"  # Checksum: 0
         
         # Section Table
@@ -208,7 +208,7 @@ create_mock_smof_files() {
         printf "\x01\x00\x00\x00"  # type: PROGBITS
         printf "\x06\x00\x00\x00"  # flags: ALLOC | EXECINSTR
         printf "\x00\x00\x00\x00"  # address
-        printf "\x90\x00\x00\x00"  # offset: 144
+        printf "\x88\x00\x00\x00"  # offset: 136 (after string table)
         printf "\x20\x00\x00\x00"  # size: 32 bytes
         printf "\x00\x00\x00\x00"  # link: 0
         printf "\x00\x00\x00\x00"  # info: 0

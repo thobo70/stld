@@ -39,10 +39,11 @@ int main(void) {
     
     /* Run each test suite */
     for (const test_suite_t* suite = test_suites; suite->name != NULL; suite++) {
+        int result;
         printf("Running %s...\n", suite->name);
         printf("----------------------------------------\n");
         
-        int result = suite->test_func();
+        result = suite->test_func();
         total_failures += result;
         total_tests++;
         
