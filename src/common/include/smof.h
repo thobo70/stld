@@ -1,22 +1,9 @@
-/* src/common/include/smof.h */
-#ifndef SMOF_H_INCLUDED
-#define SMOF_H_INCLUDED
-
-/* STAS SMOF Format - Reference Implementation */
+#ifndef SMOF_H
+#define SMOF_H
 
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * @file smof.h
- * @brief STIX Minimal Object Format (SMOF) definitions
- * @details STAS Reference Implementation - Unified SMOF format
- */
 
 // SMOF Magic number: 'SMOF' in little-endian
 #define SMOF_MAGIC 0x464F4D53
@@ -33,6 +20,8 @@ extern "C" {
 #define SMOF_FLAG_COMPRESSED    0x0020  // Sections are compressed
 #define SMOF_FLAG_ENCRYPTED     0x0040  // Basic encryption
 #define SMOF_FLAG_UNIX_FEATURES 0x0080  // Extended Unix features
+#define SMOF_FLAG_LITTLE_ENDIAN 0x0100  // Little-endian byte order
+#define SMOF_FLAG_BIG_ENDIAN    0x0200  // Big-endian byte order
 
 // Section flags
 #define SMOF_SECT_EXECUTABLE    0x0001  // Contains executable code
@@ -119,12 +108,49 @@ typedef struct {
     uint32_t symbol_offset;      // Symbol name offset
 } __attribute__((packed)) smof_import_t;
 
+// Section data storage
+typedef struct {
+    uint8_t *data;           // Section data
+    size_t size;             // Size of data
+    size_t capacity;         // Allocated capacity
+} smof_section_data_t;
+
+// SMOF context for building files
+typedef struct {
+    smof_header_t header;
+    smof_section_t *sections;
+    smof_symbol_t *symbols;
+    smof_relocation_t *relocations;
+    smof_import_t *imports;
+    smof_section_data_t *section_data;  // Data for each section
+    char *string_table;
+    size_t string_table_capacity;
+    size_t sections_capacity;
+    size_t symbols_capacity;
+    size_t relocations_capacity;
+    size_t imports_capacity;
+} smof_context_t;
+
+// Function declarations
+// output_format_ops_t *get_smof_format(void); // STAS-specific function
+
+// SMOF-specific functions
+int smof_init_context(smof_context_t *ctx);
+void smof_cleanup_context(smof_context_t *ctx);
+uint32_t smof_add_string(smof_context_t *ctx, const char *str);
+int smof_add_section(smof_context_t *ctx, const char *name, uint32_t virtual_addr,
+                     uint32_t size, uint32_t file_offset, uint16_t flags, uint8_t alignment, 
+                     const uint8_t *data);
+int smof_add_symbol(smof_context_t *ctx, const char *name, uint32_t value,
+                    uint32_t size, uint16_t section_index, uint8_t type, uint8_t binding);
+int smof_write_file(smof_context_t *ctx, const char *filename, bool verbose);
+
 // Validation functions
-int smof_validate_header(const smof_header_t *header);
+bool smof_validate_header(const smof_header_t *header);
 int smof_validate_section(const smof_section_t *section);
 
-#ifdef __cplusplus
-}
-#endif
+// Endianness helper functions
+bool smof_is_little_endian(const smof_header_t *header);
+bool smof_is_big_endian(const smof_header_t *header);
 
-#endif // SMOF_H_INCLUDED
+#endif // SMOF_H

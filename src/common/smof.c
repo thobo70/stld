@@ -11,11 +11,11 @@
  * @details STIX Machine Object Format implementation
  */
 
-/* Default SMOF header - STAS Original Format */
+/* Default SMOF header - STAS Compatible Format */
 const smof_header_t smof_default_header = {
     .magic = SMOF_MAGIC,
-    .version = SMOF_VERSION,
-    .flags = SMOF_FLAG_LITTLE_ENDIAN,
+    .version = SMOF_VERSION_CURRENT,
+    .flags = SMOF_FLAG_EXECUTABLE | SMOF_FLAG_LITTLE_ENDIAN,
     .entry_point = 0,
     .section_count = 0,
     .symbol_count = 0,
@@ -41,7 +41,7 @@ bool smof_validate_header(const smof_header_t* header) {
     }
     
     /* Check version */
-    if (header->version != SMOF_VERSION) {
+    if (header->version > SMOF_VERSION_CURRENT) {
         return false;
     }
     
@@ -57,9 +57,17 @@ bool smof_validate_header(const smof_header_t* header) {
         return false; /* Neither flag set */
     }
     
-    /* Check section count */
-    if (header->section_count > SMOF_MAX_SECTIONS) {
-        return false;
+    /* Sanity checks */
+    if (header->section_count > 256) {
+        return false; /* Reasonable limit */
+    }
+    
+    if (header->symbol_count > 32767) {
+        return false; /* uint16_t reasonable limit */
+    }
+    
+    if (header->string_table_size > 1048576) {
+        return false; /* 1MB limit */
     }
     
     /* Validate table offsets */
@@ -80,7 +88,7 @@ bool smof_validate_header(const smof_header_t* header) {
 
     /* Check for overlapping tables */
     if (header->section_count > 0) {
-        uint32_t section_table_size = header->section_count * sizeof(smof_section_header_t);
+        uint32_t section_table_size = header->section_count * sizeof(smof_section_t);
         if (header->string_table_offset > 0 && 
             header->string_table_offset < header->section_table_offset + section_table_size) {
             return false;
