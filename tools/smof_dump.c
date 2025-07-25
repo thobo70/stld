@@ -44,7 +44,7 @@ static void print_usage(const char* program) {
     printf("  -y, --symbols     Show symbol table\n");
     printf("  -r, --relocations Show relocations\n");
     printf("  -x, --hex-dump    Show hex dump of sections\n");
-    printf("  -v, --verbose     Verbose output\n");
+    printf("  -v, --verbose     Show all information (header, sections, symbols, relocations, hex dump)\n");
     printf("      --help        Show this help\n");
     printf("      --version     Show version\n");
 }
@@ -216,6 +216,15 @@ int main(int argc, char* argv[]) {
     }
     
     filename = argv[optind];
+    
+    /* If verbose is set, show all information */
+    if (opts.verbose) {
+        opts.show_header = true;
+        opts.show_sections = true;
+        opts.show_symbols = true;
+        opts.show_relocations = true;
+        opts.hex_dump = true;
+    }
     
     /* If no options specified, show header and sections */
     if (!opts.show_header && !opts.show_sections && !opts.show_symbols && !opts.show_relocations) {
