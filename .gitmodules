@@ -1,0 +1,3 @@
+[submodule "tools/stas"]
+	path = tools/stas
+	url = https://github.com/thobo70/stas.git
