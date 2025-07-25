@@ -324,7 +324,7 @@ int stld_link(stld_context_t* context, const char* output_file) {
         /* Write SMOF header */
         smof_header_t header = {
             .magic = SMOF_MAGIC,
-            .version = SMOF_VERSION,
+            .version = SMOF_VERSION_CURRENT,
             .flags = SMOF_FLAG_LITTLE_ENDIAN,
             .entry_point = context->options.base_address,
             .section_count = 1,

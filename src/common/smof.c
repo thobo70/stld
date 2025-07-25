@@ -27,22 +27,22 @@ const smof_header_t smof_default_header = {
     .import_count = 0
 };
 
-bool smof_validate_header(const smof_header_t* header) {
+int smof_validate_header(const smof_header_t* header) {
     bool little_endian;
     bool big_endian;
     
     if (header == NULL) {
-        return false;
+        return 0;
     }
     
     /* Check magic */
     if (header->magic != SMOF_MAGIC) {
-        return false;
+        return 0;
     }
     
     /* Check version */
     if (header->version > SMOF_VERSION_CURRENT) {
-        return false;
+        return 0;
     }
     
     /* Check endianness flags */
@@ -50,40 +50,40 @@ bool smof_validate_header(const smof_header_t* header) {
     big_endian = (header->flags & SMOF_FLAG_BIG_ENDIAN) != 0;
     
     if (little_endian && big_endian) {
-        return false; /* Both flags set */
+        return 0; /* Both flags set */
     }
     
     if (!little_endian && !big_endian) {
-        return false; /* Neither flag set */
+        return 0; /* Neither flag set */
     }
     
     /* Sanity checks */
     if (header->section_count > 256) {
-        return false; /* Reasonable limit */
+        return 0; /* Reasonable limit */
     }
     
     if (header->symbol_count > 32767) {
-        return false; /* uint16_t reasonable limit */
+        return 0; /* uint16_t reasonable limit */
     }
     
     if (header->string_table_size > 1048576) {
-        return false; /* 1MB limit */
+        return 0; /* 1MB limit */
     }
     
     /* Validate table offsets */
     if (header->section_table_offset > 0 && 
         header->section_table_offset < sizeof(smof_header_t)) {
-        return false;
+        return 0;
     }
 
     if (header->string_table_offset > 0 && 
         header->string_table_offset < sizeof(smof_header_t)) {
-        return false;
+        return 0;
     }
 
     if (header->reloc_table_offset > 0 && 
         header->reloc_table_offset < sizeof(smof_header_t)) {
-        return false;
+        return 0;
     }
 
     /* Check for overlapping tables */
@@ -91,7 +91,7 @@ bool smof_validate_header(const smof_header_t* header) {
         uint32_t section_table_size = header->section_count * sizeof(smof_section_t);
         if (header->string_table_offset > 0 && 
             header->string_table_offset < header->section_table_offset + section_table_size) {
-            return false;
+            return 0;
         }
     }
 
@@ -99,9 +99,9 @@ bool smof_validate_header(const smof_header_t* header) {
         uint32_t reloc_table_size = header->reloc_count * sizeof(smof_relocation_t);
         if (header->string_table_offset > 0 &&
             header->string_table_offset < header->reloc_table_offset + reloc_table_size) {
-            return false;
+            return 0;
         }
-    }    return true;
+    }    return 1;
 }
 
 bool smof_is_little_endian(const smof_header_t* header) {

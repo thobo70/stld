@@ -314,52 +314,60 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    /* Show symbols - STAS format doesn't include symbol table in header, need to find it in sections */
+    /* Show symbols - Symbol table comes right after section table */
     if (opts.show_symbols && header.symbol_count > 0) {
+        uint32_t symbol_table_offset;
+        uint16_t i;
+        
         printf("\nSymbol Table: %u symbols\n", header.symbol_count);
         printf("  [Nr] Value    Size Type    Bind   Ndx Name\n");
         
-        /* Find symbol table section - in STAS format, symbols are stored in sections */
-        fseek(file, header.section_table_offset, SEEK_SET);
+        /* Calculate symbol table offset: right after section table */
+        symbol_table_offset = (uint32_t)(header.section_table_offset + 
+                             (header.section_count * sizeof(smof_section_t)));
         
-        for (uint16_t i = 0; i < header.section_count; i++) {
-            smof_section_t section;
-            if (fread(&section, sizeof(section), 1, file) != 1) continue;
+        fseek(file, symbol_table_offset, SEEK_SET);
+        
+        for (i = 0; i < header.symbol_count; i++) {
+            smof_symbol_t symbol;
+            char symbol_name[128] = "<unknown>";
             
-            /* Check if this is a symbol table section (heuristic) */
-            if (section.size > 0 && (section.size % sizeof(smof_symbol_t)) == 0) {
-                uint32_t num_symbols = section.size / sizeof(smof_symbol_t);
-                if (num_symbols == header.symbol_count) {
-                    /* Found symbol table */
-                    long pos = ftell(file);
-                    fseek(file, section.file_offset, SEEK_SET);
-                    
-                    for (uint32_t j = 0; j < num_symbols; j++) {
-                        smof_symbol_t symbol;
-                        char symbol_name[128] = "<unknown>";
-                        
-                        if (fread(&symbol, sizeof(symbol), 1, file) != 1) break;
-                        
-                        /* Get symbol name from string table */
-                        if (header.string_table_offset > 0 && symbol.name_offset > 0) {
-                            long sym_pos = ftell(file);
-                            fseek(file, header.string_table_offset + symbol.name_offset, SEEK_SET);
-                            fread(symbol_name, 1, sizeof(symbol_name) - 1, file);
-                            symbol_name[sizeof(symbol_name) - 1] = '\0';
-                            fseek(file, sym_pos, SEEK_SET);
-                        }
-                        
-                        printf("  [%2u] %08X %4u %-7s %-6s %3u %s\n",
-                               j, symbol.value, symbol.size,
-                               get_symbol_type_string(symbol.type),
-                               get_symbol_binding_string(symbol.binding),
-                               symbol.section_index, symbol_name);
-                    }
-                    
-                    fseek(file, pos, SEEK_SET);
-                    break;
-                }
+            if (fread(&symbol, sizeof(symbol), 1, file) != 1) {
+                fprintf(stderr, "Error reading symbol %u\n", i);
+                break;
             }
+            
+            /* Read symbol name from string table */
+            if (symbol.name_offset > 0 && symbol.name_offset < header.string_table_size) {
+                long pos = ftell(file);
+                size_t max_len = sizeof(symbol_name) - 1;
+                size_t remaining = header.string_table_size - symbol.name_offset;
+                size_t read_len = max_len < remaining ? max_len : remaining;
+                size_t k;
+                
+                fseek(file, header.string_table_offset + symbol.name_offset, SEEK_SET);
+                
+                if (fread(symbol_name, 1, read_len, file) > 0) {
+                    symbol_name[read_len] = '\0';
+                    /* Ensure null termination */
+                    for (k = 0; k < read_len; k++) {
+                        if (symbol_name[k] == '\0') break;
+                        if (symbol_name[k] < 32 || symbol_name[k] > 126) {
+                            symbol_name[k] = '\0';
+                            break;
+                        }
+                    }
+                }
+                
+                fseek(file, pos, SEEK_SET);
+            }
+            
+            printf("  [%2u] %08X %4u %-7s %-6s %3u %s\n",
+                   i, symbol.value, symbol.size,
+                   get_symbol_type_string(symbol.type),
+                   get_symbol_binding_string(symbol.binding),
+                   symbol.section_index,
+                   symbol_name);
         }
     }
     

@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 // SMOF Magic number: 'SMOF' in little-endian
-#define SMOF_MAGIC 0x464F4D53
+#define SMOF_MAGIC 0x534D4F46U
 
 // SMOF Version
 #define SMOF_VERSION_CURRENT 1
@@ -146,7 +146,7 @@ int smof_add_symbol(smof_context_t *ctx, const char *name, uint32_t value,
 int smof_write_file(smof_context_t *ctx, const char *filename, bool verbose);
 
 // Validation functions
-bool smof_validate_header(const smof_header_t *header);
+int smof_validate_header(const smof_header_t *header);
 int smof_validate_section(const smof_section_t *section);
 
 // Endianness helper functions
