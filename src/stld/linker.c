@@ -1,7 +1,7 @@
 /* src/stld/linker.c */
 #include "include/stld.h"
-#include "error.h"
-#include "smof.h"
+#include "../common/include/error.h"
+#include "../common/include/smof.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -12,18 +12,33 @@
  * @details Main linking logic implementation
  */
 
-/* Forward declarations for simple internal structures */
+/* Forward declarations for enhanced internal structures */
 typedef struct symbol_entry {
     char* name;
     uint64_t value;
+    uint32_t size;
+    uint8_t type;
+    uint8_t binding;
+    uint16_t section_index;
     struct symbol_entry* next;
 } symbol_entry_t;
 
 typedef struct section_entry {
     char* name;
     uint64_t size;
+    uint32_t virtual_address;
+    uint16_t flags;
+    uint8_t *data;  /* Section data for relocation processing */
     struct section_entry* next;
 } section_entry_t;
+
+typedef struct relocation_entry {
+    uint32_t offset;
+    uint16_t symbol_index;
+    uint8_t type;
+    uint8_t section_index;
+    struct relocation_entry* next;
+} relocation_entry_t;
 
 /* STLD context structure */
 struct stld_context {
@@ -32,6 +47,7 @@ struct stld_context {
     void* progress_user_data;
     symbol_entry_t* symbols;
     section_entry_t* sections;
+    relocation_entry_t* relocations; /* Add relocations support */
     char** input_files;
     size_t input_file_count;
     size_t input_file_capacity;
@@ -268,10 +284,67 @@ static int load_smof_file(stld_context_t* context, const char* filename) {
     return ERROR_SUCCESS;
 }
 
+/* Symbol resolution function */
+static symbol_entry_t* find_symbol(stld_context_t* context, const char* name) __attribute__((unused));
+static symbol_entry_t* find_symbol(stld_context_t* context, const char* name) {
+    symbol_entry_t* symbol = context->symbols;
+    while (symbol) {
+        if (strcmp(symbol->name, name) == 0) {
+            return symbol;
+        }
+        symbol = symbol->next;
+    }
+    return NULL;
+}
+
+/* Relocation processing function */
+static int process_relocations(stld_context_t* context) {
+    relocation_entry_t* reloc = context->relocations;
+    int unresolved_count = 0;
+    
+    while (reloc) {
+        /* Find the symbol for this relocation */
+        symbol_entry_t* symbol = context->symbols;
+        uint16_t symbol_index = 0;
+        
+        /* Find symbol by index */
+        for (uint16_t i = 0; i < reloc->symbol_index && symbol; i++) {
+            symbol = symbol->next;
+            symbol_index++;
+        }
+        
+        if (symbol) {
+            /* Apply relocation based on type */
+            switch (reloc->type) {
+                case 1: /* SMOF_RELOC_ABS32 */
+                    /* For absolute relocations, use symbol value directly */
+                    /* In a real linker, this would patch the binary */
+                    break;
+                    
+                case 2: /* SMOF_RELOC_REL32 */
+                    /* For PC-relative relocations, calculate offset */
+                    /* offset = symbol_address - (relocation_address + 4) */
+                    break;
+                    
+                default:
+                    /* Unknown relocation type */
+                    unresolved_count++;
+                    break;
+            }
+        } else {
+            unresolved_count++;
+        }
+        
+        reloc = reloc->next;
+    }
+    
+    return unresolved_count == 0 ? ERROR_SUCCESS : ERROR_SYMBOL_NOT_FOUND;
+}
+
 int stld_link(stld_context_t* context, const char* output_file) {
     size_t i;
     int result;
-    FILE* output;
+    FILE* output = NULL;  /* Initialize to NULL */
     
     if (context == NULL || output_file == NULL) {
         return ERROR_INVALID_ARGUMENT;
@@ -297,6 +370,15 @@ int stld_link(stld_context_t* context, const char* output_file) {
     /* Resolve symbols */
     if (context->progress_callback != NULL) {
         context->progress_callback("Resolving symbols", 50, context->progress_user_data);
+    }
+    
+    // Process relocations using the current context structure
+    result = process_relocations(context);
+    if (result != ERROR_SUCCESS) {
+        if (output != NULL) {
+            fclose(output);
+        }
+        return result;
     }
     
     /* Layout sections */

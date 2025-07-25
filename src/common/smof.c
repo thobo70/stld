@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdio.h>
 
 /**
  * @file smof.c
@@ -49,6 +50,12 @@ int smof_validate_header(const smof_header_t* header) {
     little_endian = (header->flags & SMOF_FLAG_LITTLE_ENDIAN) != 0;
     big_endian = (header->flags & SMOF_FLAG_BIG_ENDIAN) != 0;
     
+    // Also check STAS-compatible endianness flags (0x0010/0x0020)
+    if (!little_endian && !big_endian) {
+        little_endian = (header->flags & 0x0010) != 0;  // STAS SMOF_FLAG_LITTLE_ENDIAN
+        big_endian = (header->flags & 0x0020) != 0;     // STAS SMOF_FLAG_BIG_ENDIAN
+    }
+    
     if (little_endian && big_endian) {
         return 0; /* Both flags set */
     }
@@ -90,6 +97,7 @@ int smof_validate_header(const smof_header_t* header) {
     if (header->section_count > 0) {
         uint32_t section_table_size = header->section_count * sizeof(smof_section_t);
         if (header->string_table_offset > 0 && 
+            header->string_table_offset > header->section_table_offset &&
             header->string_table_offset < header->section_table_offset + section_table_size) {
             return 0;
         }
@@ -98,10 +106,13 @@ int smof_validate_header(const smof_header_t* header) {
     if (header->reloc_count > 0) {
         uint32_t reloc_table_size = header->reloc_count * sizeof(smof_relocation_t);
         if (header->string_table_offset > 0 &&
+            header->string_table_offset > header->reloc_table_offset &&
             header->string_table_offset < header->reloc_table_offset + reloc_table_size) {
             return 0;
         }
-    }    return 1;
+    }    
+    
+    return 1;
 }
 
 bool smof_is_little_endian(const smof_header_t* header) {
