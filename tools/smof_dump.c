@@ -7,6 +7,26 @@
 #include <getopt.h>
 #include "../src/common/include/smof.h"
 
+// Simple validation function
+int smof_validate_header(const smof_header_t *header) {
+    if (!header) return 0;
+    
+    // Magic number check
+    if (header->magic != SMOF_MAGIC) return 0;
+    
+    // Version check
+    if (header->version > SMOF_VERSION_CURRENT) return 0;
+    
+    // Sanity checks
+    if (header->section_count > 256) return 0; // Reasonable limit
+    if (header->string_table_size > 1048576) return 0; // 1MB limit
+    
+    // Offset validation
+    if (header->section_table_offset < sizeof(smof_header_t)) return 0;
+    
+    return 1; // Valid
+}
+
 typedef struct {
     bool show_header;
     bool show_sections;
@@ -37,11 +57,11 @@ static const char* get_section_flag_string(uint16_t flags) {
     static char flag_str[64];
     flag_str[0] = '\0';
     
-    if (flags & SMOF_SHF_WRITE) strcat(flag_str, "W");
-    if (flags & SMOF_SHF_ALLOC) strcat(flag_str, "A");
-    if (flags & SMOF_SHF_EXECINSTR) strcat(flag_str, "X");
-    if (flags & SMOF_SHF_MERGE) strcat(flag_str, "M");
-    if (flags & SMOF_SHF_STRINGS) strcat(flag_str, "S");
+    if (flags & SMOF_SECT_WRITABLE) strcat(flag_str, "W");
+    if (flags & SMOF_SECT_LOADABLE) strcat(flag_str, "A");
+    if (flags & SMOF_SECT_EXECUTABLE) strcat(flag_str, "X");
+    if (flags & SMOF_SECT_SHARED) strcat(flag_str, "M");
+    if (flags & SMOF_SECT_READABLE) strcat(flag_str, "R");
     
     if (flag_str[0] == '\0') strcpy(flag_str, "-");
     return flag_str;
@@ -49,40 +69,41 @@ static const char* get_section_flag_string(uint16_t flags) {
 
 static const char* get_symbol_type_string(uint8_t type) {
     switch (type) {
-        case SMOF_STT_NOTYPE: return "NOTYPE";
-        case SMOF_STT_OBJECT: return "OBJECT";
-        case SMOF_STT_FUNC: return "FUNC";
-        case SMOF_STT_SECTION: return "SECTION";
-        case SMOF_STT_FILE: return "FILE";
+        case SMOF_SYM_NOTYPE: return "NOTYPE";
+        case SMOF_SYM_OBJECT: return "OBJECT";
+        case SMOF_SYM_FUNC: return "FUNC";
+        case SMOF_SYM_SECTION: return "SECTION";
+        case SMOF_SYM_FILE: return "FILE";
+        case SMOF_SYM_SYSCALL: return "SYSCALL";
         default: return "UNKNOWN";
     }
 }
 
 static const char* get_symbol_binding_string(uint8_t binding) {
     switch (binding) {
-        case SMOF_STB_LOCAL: return "LOCAL";
-        case SMOF_STB_GLOBAL: return "GLOBAL";
-        case SMOF_STB_WEAK: return "WEAK";
+        case SMOF_BIND_LOCAL: return "LOCAL";
+        case SMOF_BIND_GLOBAL: return "GLOBAL";
+        case SMOF_BIND_WEAK: return "WEAK";
+        case SMOF_BIND_EXPORT: return "EXPORT";
         default: return "UNKNOWN";
     }
 }
 
 static const char* get_relocation_type_string(uint8_t type) {
     switch (type) {
-        case SMOF_R_NONE: return "R_NONE";
-        case SMOF_R_8: return "R_8";
-        case SMOF_R_16: return "R_16";
-        case SMOF_R_32: return "R_32";
-        case SMOF_R_PC8: return "R_PC8";
-        case SMOF_R_PC16: return "R_PC16";
-        case SMOF_R_PC32: return "R_PC32";
-        case SMOF_R_GOT32: return "R_GOT32";
-        case SMOF_R_PLT32: return "R_PLT32";
+        case SMOF_RELOC_NONE: return "R_NONE";
+        case SMOF_RELOC_ABS16: return "R_ABS16";
+        case SMOF_RELOC_ABS32: return "R_ABS32";
+        case SMOF_RELOC_REL16: return "R_REL16";
+        case SMOF_RELOC_REL32: return "R_REL32";
+        case SMOF_RELOC_SYSCALL: return "R_SYSCALL";
+        case SMOF_RELOC_GOT: return "R_GOT";
+        case SMOF_RELOC_PLT: return "R_PLT";
         default: return "R_UNKNOWN";
     }
 }
 
-static void hex_dump_section(FILE* file, const smof_section_header_t* section, const char* name) {
+static void hex_dump_section(FILE* file, const smof_section_t* section, const char* name) {
     uint8_t buffer[16];
     size_t remaining;
     uint32_t addr;
@@ -240,11 +261,11 @@ int main(int argc, char* argv[]) {
         printf("  Flags:              0x%04X", header.flags);
         
         if (header.flags & SMOF_FLAG_EXECUTABLE) printf(" EXECUTABLE");
-        if (header.flags & SMOF_FLAG_RELOCATABLE) printf(" RELOCATABLE");
-        if (header.flags & SMOF_FLAG_SHARED) printf(" SHARED");
-        if (header.flags & SMOF_FLAG_DEBUG) printf(" DEBUG");
-        if (header.flags & SMOF_FLAG_LITTLE_ENDIAN) printf(" LITTLE_ENDIAN");
-        if (header.flags & SMOF_FLAG_BIG_ENDIAN) printf(" BIG_ENDIAN");
+        if (header.flags & SMOF_FLAG_SHARED_LIB) printf(" SHARED_LIB");
+        if (header.flags & SMOF_FLAG_POSITION_INDEP) printf(" POSITION_INDEP");
+        if (header.flags & SMOF_FLAG_STRIPPED) printf(" STRIPPED");
+        if (header.flags & SMOF_FLAG_STATIC) printf(" STATIC");
+        if (header.flags & SMOF_FLAG_COMPRESSED) printf(" COMPRESSED");
         printf("\n");
         
         printf("  Entry Point:        0x%08X\n", header.entry_point);
@@ -264,7 +285,7 @@ int main(int argc, char* argv[]) {
         fseek(file, header.section_table_offset, SEEK_SET);
         
         for (uint16_t i = 0; i < header.section_count; i++) {
-            smof_section_header_t section;
+            smof_section_t section;
             char section_name[64] = "<unknown>";
             long pos;
             
@@ -302,7 +323,7 @@ int main(int argc, char* argv[]) {
         fseek(file, header.section_table_offset, SEEK_SET);
         
         for (uint16_t i = 0; i < header.section_count; i++) {
-            smof_section_header_t section;
+            smof_section_t section;
             if (fread(&section, sizeof(section), 1, file) != 1) continue;
             
             /* Check if this is a symbol table section (heuristic) */
