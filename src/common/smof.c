@@ -11,7 +11,7 @@
  * @details STIX Machine Object Format implementation
  */
 
-/* Default SMOF header */
+/* Default SMOF header - STAS Original Format */
 const smof_header_t smof_default_header = {
     .magic = SMOF_MAGIC,
     .version = SMOF_VERSION,
@@ -19,10 +19,12 @@ const smof_header_t smof_default_header = {
     .entry_point = 0,
     .section_count = 0,
     .symbol_count = 0,
+    .string_table_offset = sizeof(smof_header_t),
+    .string_table_size = 0,
     .section_table_offset = sizeof(smof_header_t),
-    .symbol_table_offset = 0,
-    .string_table_offset = 0,
-    .checksum = 0
+    .reloc_table_offset = 0,
+    .reloc_count = 0,
+    .import_count = 0
 };
 
 bool smof_validate_header(const smof_header_t* header) {
@@ -65,63 +67,33 @@ bool smof_validate_header(const smof_header_t* header) {
         header->section_table_offset < sizeof(smof_header_t)) {
         return false;
     }
-    
-    if (header->symbol_table_offset > 0 && 
-        header->symbol_table_offset < sizeof(smof_header_t)) {
-        return false;
-    }
-    
+
     if (header->string_table_offset > 0 && 
         header->string_table_offset < sizeof(smof_header_t)) {
         return false;
     }
-    
+
+    if (header->reloc_table_offset > 0 && 
+        header->reloc_table_offset < sizeof(smof_header_t)) {
+        return false;
+    }
+
     /* Check for overlapping tables */
     if (header->section_count > 0) {
         uint32_t section_table_size = header->section_count * sizeof(smof_section_header_t);
-        if (header->symbol_table_offset > 0 && 
-            header->symbol_table_offset < header->section_table_offset + section_table_size) {
+        if (header->string_table_offset > 0 && 
+            header->string_table_offset < header->section_table_offset + section_table_size) {
             return false;
         }
     }
-    
-    if (header->symbol_count > 0) {
-        uint32_t symbol_table_size = header->symbol_count * sizeof(smof_symbol_t);
-        if (header->string_table_offset > 0 &&
-            header->string_table_offset < header->symbol_table_offset + symbol_table_size) {
-            return false;
-        }
-    }
-    
-    return true;
-}
 
-uint32_t smof_calculate_checksum(const smof_header_t* header) {
-    uint32_t checksum;
-    const uint8_t* data;
-    size_t checksum_offset;
-    size_t i;
-    
-    if (header == NULL) {
-        return 0;
-    }
-    
-    /* Calculate checksum of header excluding the checksum field */
-    checksum = 0;
-    data = (const uint8_t*)header;
-    checksum_offset = offsetof(smof_header_t, checksum);
-    
-    /* Sum bytes before checksum field */
-    for (i = 0; i < checksum_offset; i++) {
-        checksum += data[i];
-    }
-    
-    /* Sum bytes after checksum field */
-    for (i = checksum_offset + sizeof(uint32_t); i < sizeof(smof_header_t); i++) {
-        checksum += data[i];
-    }
-    
-    return checksum;
+    if (header->reloc_count > 0) {
+        uint32_t reloc_table_size = header->reloc_count * sizeof(smof_relocation_t);
+        if (header->string_table_offset > 0 &&
+            header->string_table_offset < header->reloc_table_offset + reloc_table_size) {
+            return false;
+        }
+    }    return true;
 }
 
 bool smof_is_little_endian(const smof_header_t* header) {

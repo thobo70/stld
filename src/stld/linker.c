@@ -329,10 +329,12 @@ int stld_link(stld_context_t* context, const char* output_file) {
             .entry_point = context->options.base_address,
             .section_count = 1,
             .symbol_count = 1,
-            .section_table_offset = sizeof(smof_header_t),
-            .symbol_table_offset = sizeof(smof_header_t) + 40,
-            .string_table_offset = sizeof(smof_header_t) + 40 + 16,
-            .checksum = 0
+            .string_table_offset = sizeof(smof_header_t),
+            .string_table_size = 16,
+            .section_table_offset = sizeof(smof_header_t) + 16,
+            .reloc_table_offset = 0,
+            .reloc_count = 0,
+            .import_count = 0
         };
         fwrite(&header, sizeof(header), 1, output);
     }
